@@ -1,4 +1,4 @@
-# simv1 — civilian room reconstruction
+# dnhax — simv1 civilian room reconstruction
 
 A local three-laptop demo for submitted room captures. Two browsers upload independent walkthroughs to an NVIDIA processing laptop. A CUDA worker reconstructs each capture; the viewer supports manual landmark registration, validation, and inspection of the combined point clouds.
 
