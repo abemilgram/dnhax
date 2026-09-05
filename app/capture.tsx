@@ -2,7 +2,7 @@
 /* eslint-disable jsx-a11y/media-has-caption -- Room geometry previews are silent; audio is not used. */
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, Monitor, Square } from 'lucide-react';
+import { Upload, Monitor, Camera, Square } from 'lucide-react';
 import type { State } from './types';
 export default function Capture({
   source,
@@ -20,6 +20,7 @@ export default function Capture({
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState('');
   const [recording, setRecording] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -45,25 +46,34 @@ export default function Capture({
     },
     [],
   );
-  async function record() {
+  async function record(mode: 'screen' | 'camera') {
     setError('');
+    setStarting(true);
     try {
       if (!window.isSecureContext)
         throw Error(
-          'Screen recording requires localhost or trusted HTTPS. You can upload an existing video over LAN HTTP.',
+          'Recording requires localhost or trusted HTTPS. You can upload an existing video over LAN HTTP.',
         );
-      if (!navigator.mediaDevices?.getDisplayMedia)
+      if (mode === 'screen' && !navigator.mediaDevices?.getDisplayMedia)
         throw Error(
           'Screen recording is unavailable in this browser. Open this app in Chrome or Edge, or upload an existing recording.',
         );
+      if (mode === 'camera' && !navigator.mediaDevices?.getUserMedia)
+        throw Error('Camera recording is unavailable in this browser.');
       if (typeof MediaRecorder === 'undefined')
         throw Error(
-          'This browser cannot record clips. Upload an existing screen recording instead.',
+          'This browser cannot record clips. Upload an existing recording instead.',
         );
-      const media = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false,
-      });
+      const media =
+        mode === 'screen'
+          ? await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: false,
+            })
+          : await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
       stream.current = media;
       const chunks: BlobPart[] = [];
       const mime = ['video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find(
@@ -92,7 +102,7 @@ export default function Capture({
         setFile(
           new File(
             chunks,
-            `room-${source}-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`,
+            `room-${source}-${mode}-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`,
             { type },
           ),
         );
@@ -110,9 +120,9 @@ export default function Capture({
     } catch (e) {
       stream.current?.getTracks().forEach((t) => t.stop());
       setRecording(false);
-      setError(
-        e instanceof Error ? e.message : 'Screen recording could not start.',
-      );
+      setError(e instanceof Error ? e.message : 'Recording could not start.');
+    } finally {
+      setStarting(false);
     }
   }
   return (
@@ -136,8 +146,19 @@ export default function Capture({
         style={{ display: recording || url || capture ? 'block' : 'none' }}
       />
       <div className="record-controls">
-        <Button variant="outline" disabled={busy || recording} onClick={record}>
+        <Button
+          variant="outline"
+          disabled={busy || recording || starting}
+          onClick={() => void record('screen')}
+        >
           <Monitor /> Record screen
+        </Button>
+        <Button
+          variant="outline"
+          disabled={busy || recording || starting}
+          onClick={() => void record('camera')}
+        >
+          <Camera /> Record camera
         </Button>
         {recording && (
           <Button
@@ -184,7 +205,7 @@ export default function Capture({
         </Button>
       </div>
       <p className="video-note">
-        Choose a screen, window, or tab in the browser picker. Recording stops
+        Record your camera, or choose a screen, window, or tab. Recording stops
         after 60 seconds or when you stop sharing. Nothing is uploaded until you
         submit. Maximum upload: 512 MB.
       </p>
