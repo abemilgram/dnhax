@@ -44,6 +44,20 @@ To allow PyTorch's optional fallback for certain unsupported MPS operations, set
 
 For another laptop, use the server's LAN address. Screen recording there still requires trusted HTTPS or a localhost SSH tunnel, as described in README.md.
 
+### Same-Wi-Fi phone capture over HTTPS
+
+Install `mkcert`, then use the macOS launcher to create a LAN certificate, expose only its public CA certificate on port 8001, and run the app over HTTPS on port 8000:
+
+```sh
+brew install mkcert
+export VGGT_OMEGA_CHECKPOINT='/absolute/path/to/vggt_omega_1b_512.pt'
+.venv/bin/python scripts/serve_macos_https.py
+```
+
+The launcher prints three exact URLs: the public CA certificate, the Mac app, and the phone app. On an iPhone or iPad, open the CA URL in Safari, install the downloaded profile under **Settings → General → VPN & Device Management**, then enable it under **Settings → General → About → Certificate Trust Settings**. Open the printed phone app URL after trust is enabled. Android setting names vary; install the downloaded file as a CA certificate before opening the HTTPS URL.
+
+The generated certificate, private key, and public phone certificate stay under ignored `work/` directories. The temporary certificate server exposes only the public CA file and stops with the app. Never copy or serve the private key. Mobile browsers may support camera recording without supporting screen recording.
+
 ## Implementation and validation limits
 
 `backend/runtime.py` selects the device, releases device-specific caches, and dispatches inference. CUDA uses upstream `forward` unchanged. MPS/CPU directly call the same aggregator and camera/depth heads without upstream's hard-coded CUDA autocast contexts. The model and inputs stay float32; no upstream files or global Torch functions are modified. The optional text-alignment head is not used by this application.
