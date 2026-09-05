@@ -1,4 +1,4 @@
-"""Optional CUDA adapter. Never substitutes fixture geometry for real captures."""
+"""CUDA / Apple MPS / CPU batch adapter. Never substitutes fixture geometry for real captures."""
 
 import json
 import os
@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from . import store
 from .geometry import depth_edge_mask
+from .runtime import select_device, frame_limit, predict_geometry, release_memory
 
 
 def reconstruct(capture, progress):
@@ -18,12 +19,10 @@ def reconstruct(capture, progress):
         from vggt_omega.utils.pose_enc import encoding_to_camera
     except ImportError as exc:
         raise RuntimeError(
-            "Install CUDA PyTorch and the official vggt-omega package in this worker environment. See README.md."
+            "Install PyTorch and the official vggt-omega package in this worker environment. See MACOS.md or README.md."
         ) from exc
-    if not torch.cuda.is_available():
-        raise RuntimeError(
-            "CUDA is unavailable. Run the worker on the NVIDIA laptop; sample scenes remain available on CPU."
-        )
+    device = select_device(torch)
+    max_frames = frame_limit(device)
     checkpoint = Path(os.environ.get("VGGT_OMEGA_CHECKPOINT", ""))
     if not checkpoint.is_file():
         raise RuntimeError(
@@ -37,7 +36,7 @@ def reconstruct(capture, progress):
     if (folder / "cloud.json").exists():
         return json.loads((folder / "cloud.json").read_text())
     # Bounded submitted-clip processing. This is not a streaming reconstruction loop.
-    progress("Extracting up to 24 frames from the submitted clip")
+    progress(f"Extracting up to {max_frames} frames for {device.upper()}")
     result = subprocess.run(
         [
             "ffmpeg",
@@ -50,7 +49,7 @@ def reconstruct(capture, progress):
             "-vf",
             "fps=1,scale=960:960:force_original_aspect_ratio=decrease",
             "-frames:v",
-            "24",
+            str(max_frames),
             str(frames / "%04d.jpg"),
         ],
         capture_output=True,
@@ -66,20 +65,21 @@ def reconstruct(capture, progress):
         raise RuntimeError(
             "Capture needs at least two usable frames. Submit a longer walkthrough."
         )
-    progress(f"Reconstructing {len(images)} frames on CUDA")
+    progress(f"Reconstructing {len(images)} frames on {device.upper()}")
     model = None
     predictions = None
     inputs = None
     try:
-        model = VGGTOmega().to("cuda").eval()
+        model = VGGTOmega().eval()
         model.load_state_dict(
             torch.load(str(checkpoint), map_location="cpu", weights_only=True)
         )
+        model = model.to(device=device, dtype=torch.float32)
         inputs = load_and_preprocess_images(
             [str(p) for p in images], image_resolution=512
-        ).to("cuda")
+        ).to(device=device, dtype=torch.float32)
         with torch.inference_mode():
-            predictions = model(inputs)
+            predictions = predict_geometry(model, inputs, device)
         extrinsics, intrinsics = encoding_to_camera(
             predictions["pose_enc"], predictions["images"].shape[-2:]
         )
@@ -141,9 +141,23 @@ def reconstruct(capture, progress):
             capture["source"],
             capture_id=capture["id"],
             cameras=camera_records,
+            compute_device=device,
+            frame_count=len(images),
+            precision="float32" if device != "cuda" else "upstream mixed precision",
         )
         (folder / "cloud.json").write_text(json.dumps(record, allow_nan=False))
         return record
+    except RuntimeError as exc:
+        if "out of memory" in str(exc).lower():
+            raise RuntimeError(
+                f"{device.upper()} ran out of memory. Reduce SIMV1_MAX_FRAMES (currently {max_frames}) and submit a new capture. No automatic CPU retry was performed."
+            ) from exc
+        raise
     finally:
+        # Camera tensors may still hold GPU allocations after export.
+        if "extrinsics" in locals():
+            del extrinsics
+        if "intrinsics" in locals():
+            del intrinsics
         del predictions, inputs, model
-        torch.cuda.empty_cache()
+        release_memory(torch, device)

@@ -12,3 +12,11 @@
 - Sample registration: synthetic geometry, not evidence of real capture accuracy.
 
 Not verified here: NVIDIA CUDA inference, model checkpoint loading, real-video reconstruction quality, browser interactions/screen-sharing permission flows, cross-laptop connectivity, or the optional WebMCP integration. These need the target hardware and browser. No claim of live reconstruction or automatic cross-capture matching is made.
+
+## macos branch
+
+- 17 backend tests pass, including device selection, strict device errors, frame limits, targeted cache cleanup, non-CUDA head dispatch using real CPU tensors, and unchanged CUDA forward dispatch.
+- macOS arm64 / Python 3.11 dependency resolution succeeded for requirements-macos.txt. This is dependency resolution, not a full installation test.
+- The compute checker passed its CPU matrix operation. It correctly reported missing model installation/checkpoint.
+- This session is arm64 with PyTorch 2.11.0; MPS is built but unavailable. Full model-weight inference on MPS remains unverified.
+- Actual upstream model components at reduced width ran on CPU with synthetic initialized weights and finite camera/depth/confidence outputs. This checks dispatch compatibility only, not checkpoint correctness or reconstruction quality.

@@ -92,7 +92,7 @@ def process(job):
     elif kind == "reconstruct":
         from .reconstruct import reconstruct
 
-        store.update(identity, "Checking CUDA and checkpoint")
+        store.update(identity, "Checking compute device and checkpoint")
         with store.connect() as db:
             capture = dict(
                 db.execute(
@@ -166,10 +166,13 @@ def main():
     try:
         import torch
 
-        if torch.cuda.is_available():
-            device = torch.cuda.get_device_name(0)
+        from .runtime import device_label
+
+        device = device_label(torch)
     except ImportError:
         pass
+    except (ValueError, RuntimeError) as exc:
+        device = f"Compute configuration error: {exc}"
     with store.connect() as db:
         existing = db.execute("SELECT updated FROM heartbeat WHERE id=1").fetchone()
         if existing and time.time() - existing["updated"] < 20:

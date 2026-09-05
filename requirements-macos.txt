@@ -1,0 +1,7 @@
+# Native Apple Silicon Python 3.11 or 3.12; install in a clean venv.
+-r requirements.txt
+numpy==1.26.4
+torch==2.11.0
+torchvision==0.26.0
+opencv-python==4.11.0.86
+vggt-omega @ git+https://github.com/facebookresearch/vggt-omega.git@282ec70363edeff59424bf43731658092fba3d37

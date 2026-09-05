@@ -180,7 +180,7 @@ export default function Capture({
           disabled={!capture || busy}
           onClick={() => capture && onReconstruct(capture.id)}
         >
-          Reconstruct on CUDA
+          Reconstruct capture
         </Button>
       </div>
       <p className="video-note">

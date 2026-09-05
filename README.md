@@ -1,5 +1,7 @@
 # dnhax — simv1 civilian room reconstruction
 
+**macos branch:** Apple Silicon setup and validation limits are in [MACOS.md](MACOS.md). CUDA remains supported.
+
 A local three-laptop demo for submitted room captures. Two browsers upload independent walkthroughs to an NVIDIA processing laptop. A CUDA worker reconstructs each capture; the viewer supports manual landmark registration, validation, and inspection of the combined point clouds.
 
 **This release processes submitted clips. It does not implement continuous keyframe streaming, live AR overlays, automatic MASt3R matching, VLM analysis, or metric calibration.**
@@ -30,7 +32,7 @@ npm run build
 .\.venv\Scripts\python.exe scripts\serve.py
 ```
 
-macOS/Linux (sample and registration also run on CPU):
+macOS/Linux (sample and registration also run on CPU; see MACOS.md for Apple GPU inference):
 
 ```sh
 cd /path/to/simv1
@@ -77,16 +79,16 @@ $env:VGGT_OMEGA_CHECKPOINT = 'C:\models\vggt-omega\model.pt'
 .\.venv\Scripts\python.exe scripts\serve.py
 ```
 
-The adapter extracts at most 24 frames at 1 fps (the beginning of the submitted clip), independently processes each capture, confidence-filters its geometry, and exports at most 1,000,000 displayed points per source. Depth, confidence, and predicted camera matrices are preserved under the reconstruction directory. This is a fixed sampling baseline, not intelligent keyframe selection. Video timestamps are approximate frame-sampling timestamps.
+The adapter extracts a bounded number of frames at 1 fps (defaults: CUDA 24, MPS 8, CPU 2) (the beginning of the submitted clip), independently processes each capture, confidence-filters its geometry, and exports at most 1,000,000 displayed points per source. Depth, confidence, and predicted camera matrices are preserved under the reconstruction directory. This is a fixed sampling baseline, not intelligent keyframe selection. Video timestamps are approximate frame-sampling timestamps.
 
-**CUDA inference is not validated on this Mac.** The adapter follows the official model API, but installation, checkpoint format, memory use, geometry quality, and latency must be verified on the actual NVIDIA machine. A missing model, missing checkpoint, missing CUDA, or failed decode produces an explicit failed job and never a sample reconstruction. The app does not promise live processing performance.
+**CUDA inference is not validated on this Mac.** The adapter follows the official model API, but installation, checkpoint format, memory use, geometry quality, and latency must be verified on the actual NVIDIA machine. A missing model, missing checkpoint, explicitly requested unavailable device, or failed decode produces an explicit failed job and never a sample reconstruction. The app does not promise live processing performance.
 
 ## Demo walkthrough
 
 1. Open the app and click **Load sample**. Wait for the worker; a synthetic room appears.
 2. In **Alignment**, toggle Apply alignment to inspect independent frames versus registered geometry. Diagnostics are computed from the fixture's known correspondence pairs, not measured video performance.
 3. In **Explore**, isolate each source, change point size, and download original PLYs and the scene manifest.
-4. For real captures, submit one room clip to A and one to B. Click **Reconstruct on CUDA** for each and wait for both jobs to complete.
+4. For real captures, submit one room clip to A and one to B. Click **Reconstruct capture** for each and wait for both jobs to complete.
 5. Click **Combine A + B**. This publishes the two independent maps without claiming alignment.
 6. Under **Landmark alignment**, click **Pick pairs**. Select the same physical landmark first in A, then B; repeat for at least 8 well-distributed pairs. Toggle source visibility if useful. Clicking stores original cloud coordinates, even if previously transformed.
 7. Adjust the inlier threshold in A's reconstruction units and click **Fit and validate**. A new immutable scene version is published. Alternatively paste JSON with `source_points` (B) and `target_points` (A), arrays of matching `[x,y,z]` coordinates.
