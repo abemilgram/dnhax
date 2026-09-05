@@ -64,10 +64,11 @@ def test_portable_forward_uses_real_torch_without_cuda(monkeypatch):
             assert images.shape == (1, 2, 3, 8, 8)
             return [images.mean(dim=(-2, -1))], 1
 
-        def camera_head(self, features, patch_token_start):
-            return features[-1]
+        def camera_head(self, features):
+            return [features[-1]]
 
-        def dense_head(self, features, images, patch_token_start):
+        def depth_head(self, features, images, patch_start_idx):
+            assert patch_start_idx == 1
             return images.mean(2)[..., None], torch.ones((1, 2, 8, 8))
 
         def __call__(self, images):

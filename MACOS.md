@@ -20,7 +20,11 @@ npm ci
 npm run build
 ```
 
-The macOS requirements pin the audited upstream VGGT-Ω revision and NumPy 1.26.4 to satisfy its `numpy<2` requirement. No NVIDIA CUDA toolkit or compiled CUDA extension is needed by this path. Model weights are separate: request the official **VGGT-Omega-1B-512** checkpoint under its license and download it yourself.
+The macOS requirements pin the public upstream VGGT revision and NumPy 1.26.4. No NVIDIA CUDA toolkit or compiled CUDA extension is needed by this path. Download the public **facebook/VGGT-1B** checkpoint (CC-BY-NC-4.0) into the ignored local model directory:
+
+```sh
+.venv/bin/python scripts/download_vggt.py
+```
 
 ## Check and launch
 
@@ -29,12 +33,11 @@ Run in a normal macOS terminal:
 ```sh
 export SIMV1_DEVICE=mps
 export SIMV1_MAX_FRAMES=4
-export VGGT_OMEGA_CHECKPOINT='/absolute/path/to/model.pt'
 .venv/bin/python scripts/check_compute.py
 .venv/bin/python scripts/serve.py --port 48371
 ```
 
-The check performs a small matrix operation on the selected device and checks that the package and checkpoint file exist. It does **not** load or validate the checkpoint. Exit 2 means the device works but the package or checkpoint is missing; exit 1 means the device check failed.
+The check performs a small matrix operation on the selected device and checks that the package and default checkpoint file exist. It does **not** load or validate the checkpoint. Exit 2 means the device works but the package or checkpoint is missing; exit 1 means the device check failed. Set `VGGT_CHECKPOINT` only to use another compatible `.safetensors` or `.pt` checkpoint.
 
 Open `http://localhost:48371`, submit a short room clip, and select **Reconstruct capture**. Start with four frames; inspect geometry and memory before increasing `SIMV1_MAX_FRAMES`. No specific RAM size or speed is guaranteed. MPS currently uses float32 for compatibility, so it may consume more memory than CUDA mixed precision.
 
@@ -50,7 +53,7 @@ Install `mkcert`, then use the macOS launcher to create a LAN certificate, expos
 
 ```sh
 brew install mkcert
-export VGGT_OMEGA_CHECKPOINT='/absolute/path/to/vggt_omega_1b_512.pt'
+.venv/bin/python scripts/download_vggt.py
 .venv/bin/python scripts/serve_macos_https.py
 ```
 
@@ -62,6 +65,6 @@ The generated certificate, private key, and public phone certificate stay under 
 
 `backend/runtime.py` selects the device, releases device-specific caches, and dispatches inference. CUDA uses upstream `forward` unchanged. MPS/CPU directly call the same aggregator and camera/depth heads without upstream's hard-coded CUDA autocast contexts. The model and inputs stay float32; no upstream files or global Torch functions are modified. The optional text-alignment head is not used by this application.
 
-This development session reports MPS as unavailable. Device selection and non-CUDA dispatch are tested, but **full checkpoint inference on Apple GPU, reconstruction accuracy, memory consumption, and latency remain unverified**. `VALIDATION.md` records local checks. If the check fails in this environment, try a native terminal on the target Mac before assuming the hardware is unsupported.
+The MPS device check and real checkpoint inference must pass on the target Mac before treating the setup as ready. Reconstruction accuracy, memory consumption, and latency still depend on the capture and selected frame count. `VALIDATION.md` records the checks performed for this branch.
 
 Existing cached reconstructions are reused; submit a new capture when comparing devices or frame settings. `compute_device`, `frame_count`, and precision are stored on new reconstruction records.

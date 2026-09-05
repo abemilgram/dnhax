@@ -39,6 +39,7 @@ next-env.d.ts
 
 # Room capture data and local runtimes
 data/
+models/
 .venv/
 __pycache__/
 .pytest_cache/

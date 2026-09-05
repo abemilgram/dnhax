@@ -106,35 +106,52 @@ def main() -> None:
     )
     print(f"Mac app: https://127.0.0.1:{args.port}", flush=True)
     print(f"Phone app: https://{address}:{args.port}", flush=True)
-    if not env.get("VGGT_OMEGA_CHECKPOINT"):
+    checkpoint = Path(
+        env.get(
+            "VGGT_CHECKPOINT", str(ROOT / "models" / "vggt-1b" / "model.safetensors")
+        )
+    )
+    if not checkpoint.is_file():
         print(
-            "VGGT_OMEGA_CHECKPOINT is unset; sample scenes work, but model reconstruction will not.",
+            "VGGT checkpoint is missing; run .venv/bin/python scripts/download_vggt.py.",
             flush=True,
         )
 
+    app_server = subprocess.Popen(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "serve.py"),
+            "--port",
+            str(args.port),
+            "--cert",
+            str(cert),
+            "--key",
+            str(key),
+        ],
+        cwd=ROOT,
+        env=env,
+    )
+    interrupted = False
     try:
-        subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts" / "serve.py"),
-                "--port",
-                str(args.port),
-                "--cert",
-                str(cert),
-                "--key",
-                str(key),
-            ],
-            cwd=ROOT,
-            env=env,
-            check=True,
-        )
+        returncode = app_server.wait()
+    except KeyboardInterrupt:
+        interrupted = True
+        returncode = 0
     finally:
-        certificate_server.terminate()
-        try:
-            certificate_server.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            certificate_server.kill()
-            certificate_server.wait()
+        for process in (app_server, certificate_server):
+            if process.poll() is None:
+                process.terminate()
+        for process in (app_server, certificate_server):
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            except KeyboardInterrupt:
+                interrupted = True
+
+    if returncode and not interrupted:
+        raise SystemExit(returncode)
 
 
 if __name__ == "__main__":

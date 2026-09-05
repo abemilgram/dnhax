@@ -16,7 +16,8 @@ Not verified here: NVIDIA CUDA inference, model checkpoint loading, real-video r
 ## macos branch
 
 - 17 backend tests pass, including device selection, strict device errors, frame limits, targeted cache cleanup, non-CUDA head dispatch using real CPU tensors, and unchanged CUDA forward dispatch.
-- macOS arm64 / Python 3.11 dependency resolution succeeded for requirements-macos.txt. This is dependency resolution, not a full installation test.
-- The compute checker passed its CPU matrix operation. It correctly reported missing model installation/checkpoint.
-- This session is arm64 with PyTorch 2.11.0; MPS is built but unavailable. Full model-weight inference on MPS remains unverified.
-- Actual upstream model components at reduced width ran on CPU with synthetic initialized weights and finite camera/depth/confidence outputs. This checks dispatch compatibility only, not checkpoint correctness or reconstruction quality.
+- The pinned public VGGT source installed successfully on macOS arm64 / Python 3.11 with PyTorch 2.11.0, and `pip check` reports no broken requirements.
+- The public `facebook/VGGT-1B` safetensors checkpoint downloaded at the pinned Hugging Face revision. Its size is 5,026,367,224 bytes and its SHA-256 matches the repository metadata: `f164acf60724910d8fe1578bb499d800850c7bb0948db7555c413f9fbe60467e`.
+- The compute checker passed a matrix operation on Apple MPS and found both the installed package and checkpoint.
+- Full checkpoint inference completed on an Apple M4 Pro GPU for two independent submitted clips at two 518px frames each. The exports contain 415,881 and 401,209 filtered colored points, camera predictions, depth, confidence, and `compute_device: mps` provenance.
+- These checks establish that the integration executes on this Mac. They do not establish reconstruction accuracy or performance across other captures, frame counts, or Apple Silicon models.

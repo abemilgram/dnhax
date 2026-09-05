@@ -108,7 +108,7 @@ def process(job):
             "clouds": [cloud],
             "diagnostics": None,
             "scale_source": "None — arbitrary reconstruction units",
-            "provenance": "VGGT-Ω independent video reconstruction",
+            "provenance": "VGGT-1B independent video reconstruction",
         }
         store.publish(scene)
     elif kind == "pair":

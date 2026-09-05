@@ -14,19 +14,25 @@ from .runtime import select_device, frame_limit, predict_geometry, release_memor
 def reconstruct(capture, progress):
     try:
         import torch
-        from vggt_omega.models import VGGTOmega
-        from vggt_omega.utils.load_fn import load_and_preprocess_images
-        from vggt_omega.utils.pose_enc import encoding_to_camera
+        from safetensors.torch import load_file
+        from vggt.models.vggt import VGGT
+        from vggt.utils.load_fn import load_and_preprocess_images
+        from vggt.utils.pose_enc import pose_encoding_to_extri_intri
     except ImportError as exc:
         raise RuntimeError(
-            "Install PyTorch and the official vggt-omega package in this worker environment. See MACOS.md or README.md."
+            "Install PyTorch and the official vggt package in this worker environment. See MACOS.md or README.md."
         ) from exc
     device = select_device(torch)
     max_frames = frame_limit(device)
-    checkpoint = Path(os.environ.get("VGGT_OMEGA_CHECKPOINT", ""))
+    checkpoint = Path(
+        os.environ.get(
+            "VGGT_CHECKPOINT",
+            str(Path(__file__).resolve().parents[1] / "models" / "vggt-1b" / "model.safetensors"),
+        )
+    )
     if not checkpoint.is_file():
         raise RuntimeError(
-            "Set VGGT_OMEGA_CHECKPOINT to your approved VGGT-Ω 1B 512 checkpoint."
+            "Download the public VGGT-1B checkpoint with scripts/download_vggt.py or set VGGT_CHECKPOINT."
         )
     if not shutil.which("ffmpeg"):
         raise RuntimeError("FFmpeg is required on the processing machine.")
@@ -70,17 +76,31 @@ def reconstruct(capture, progress):
     predictions = None
     inputs = None
     try:
-        model = VGGTOmega().eval()
-        model.load_state_dict(
-            torch.load(str(checkpoint), map_location="cpu", weights_only=True)
+        model = VGGT(enable_point=False, enable_track=False).eval()
+        state = (
+            load_file(str(checkpoint), device="cpu")
+            if checkpoint.suffix == ".safetensors"
+            else torch.load(str(checkpoint), map_location="cpu", weights_only=True)
         )
+        incompatible = model.load_state_dict(state, strict=False)
+        unexpected = [
+            key
+            for key in incompatible.unexpected_keys
+            if not key.startswith(("point_head.", "track_head."))
+        ]
+        if incompatible.missing_keys or unexpected:
+            raise RuntimeError(
+                "VGGT checkpoint does not match the pinned model code: "
+                f"{len(incompatible.missing_keys)} missing and {len(unexpected)} unexpected keys."
+            )
+        del state
         model = model.to(device=device, dtype=torch.float32)
-        inputs = load_and_preprocess_images(
-            [str(p) for p in images], image_resolution=512
-        ).to(device=device, dtype=torch.float32)
+        inputs = load_and_preprocess_images([str(p) for p in images], mode="crop").to(
+            device=device, dtype=torch.float32
+        )
         with torch.inference_mode():
             predictions = predict_geometry(model, inputs, device)
-        extrinsics, intrinsics = encoding_to_camera(
+        extrinsics, intrinsics = pose_encoding_to_extri_intri(
             predictions["pose_enc"], predictions["images"].shape[-2:]
         )
         depth = predictions["depth"].detach().float().cpu().numpy().squeeze(0)
@@ -143,7 +163,8 @@ def reconstruct(capture, progress):
             cameras=camera_records,
             compute_device=device,
             frame_count=len(images),
-            precision="float32" if device != "cuda" else "upstream mixed precision",
+            precision="float32",
+            model="facebook/VGGT-1B",
         )
         (folder / "cloud.json").write_text(json.dumps(record, allow_nan=False))
         return record

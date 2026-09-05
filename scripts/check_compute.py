@@ -25,16 +25,22 @@ def main():
         del sample, result
         release_memory(torch, device)
         report["device_smoke_test"] = "passed"
-        report["vggt_omega_installed"] = (
-            importlib.util.find_spec("vggt_omega") is not None
+        report["vggt_installed"] = importlib.util.find_spec("vggt") is not None
+        checkpoint = Path(
+            os.environ.get(
+                "VGGT_CHECKPOINT",
+                str(
+                    Path(__file__).resolve().parents[1]
+                    / "models"
+                    / "vggt-1b"
+                    / "model.safetensors"
+                ),
+            )
         )
-        report["checkpoint_present"] = Path(
-            os.environ.get("VGGT_OMEGA_CHECKPOINT", "")
-        ).is_file()
+        report["checkpoint"] = str(checkpoint)
+        report["checkpoint_present"] = checkpoint.is_file()
         print(json.dumps(report, indent=2))
-        return (
-            0 if report["vggt_omega_installed"] and report["checkpoint_present"] else 2
-        )
+        return 0 if report["vggt_installed"] and report["checkpoint_present"] else 2
     except Exception as exc:
         report["error"] = str(exc)
         print(json.dumps(report, indent=2))

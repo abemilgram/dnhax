@@ -2,7 +2,7 @@
 
 **macos branch:** Apple Silicon setup and validation limits are in [MACOS.md](MACOS.md). CUDA remains supported.
 
-A local three-laptop demo for submitted room captures. Two browsers upload independent walkthroughs to an NVIDIA processing laptop. A CUDA worker reconstructs each capture; the viewer supports manual landmark registration, validation, and inspection of the combined point clouds.
+A local three-device demo for submitted room captures. Two browsers upload independent walkthroughs to a CUDA or Apple Silicon processing computer. A GPU worker reconstructs each capture; the viewer supports manual landmark registration, validation, and inspection of the combined point clouds.
 
 **This release processes submitted clips. It does not implement continuous keyframe streaming, live AR overlays, automatic MASt3R matching, VLM analysis, or metric calibration.**
 
@@ -59,29 +59,29 @@ python scripts/serve.py --cert /path/to/cert.pem --key /path/to/key.pem
 
 Open the corresponding `https://` address. Do not copy a CA private key to the clients. Click **Record screen** and select a screen, window, or tab in the browser picker. Stopping sharing finalizes the clip, just like the app’s Stop recording button. Screen capture availability depends on the browser; if the embedded browser does not support it, open the URL in Chrome or Edge. Recording is explicitly user-initiated and is never a background continuous upload.
 
-## Optional real CUDA reconstruction
+## Optional real VGGT reconstruction
 
 The sample path is independent of the model. No model weights are bundled or downloaded automatically.
 
-1. Install the CUDA-enabled PyTorch build matching the NVIDIA laptop using the [official PyTorch installer](https://pytorch.org/get-started/locally/), into the same Python environment used by the worker.
-2. Install the [official VGGT-Ω repository](https://github.com/facebookresearch/vggt-omega) and its dependencies into that environment, following its README. Request access to the **VGGT-Omega-1B-512** checkpoint and comply with its license. Record the installed repository revision for reproducibility.
-3. Set `VGGT_OMEGA_CHECKPOINT` to the actual `.pt` checkpoint path before starting the launcher.
-4. Verify CUDA:
+1. For NVIDIA CUDA, install the matching PyTorch build using the [official PyTorch installer](https://pytorch.org/get-started/locally/) in the worker's Python environment. For Apple MPS, follow [MACOS.md](MACOS.md).
+2. Install the pinned public [VGGT implementation](https://github.com/facebookresearch/vggt): `python -m pip install -r requirements-vggt.txt`.
+3. Download the public `facebook/VGGT-1B` weights: `python scripts/download_vggt.py`. The checkpoint uses the CC-BY-NC-4.0 license.
+4. Optionally set `VGGT_CHECKPOINT` to another compatible `.safetensors` or `.pt` checkpoint path. Otherwise the downloader's `models/vggt-1b/model.safetensors` path is used.
+5. Verify CUDA:
 
 ```sh
 python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
 ```
 
-PowerShell example:
+PowerShell launch example:
 
 ```powershell
-$env:VGGT_OMEGA_CHECKPOINT = 'C:\models\vggt-omega\model.pt'
 .\.venv\Scripts\python.exe scripts\serve.py
 ```
 
 The adapter extracts a bounded number of frames at 1 fps (defaults: CUDA 24, MPS 8, CPU 2) (the beginning of the submitted clip), independently processes each capture, confidence-filters its geometry, and exports at most 1,000,000 displayed points per source. Depth, confidence, and predicted camera matrices are preserved under the reconstruction directory. This is a fixed sampling baseline, not intelligent keyframe selection. Video timestamps are approximate frame-sampling timestamps.
 
-**CUDA inference is not validated on this Mac.** The adapter follows the official model API, but installation, checkpoint format, memory use, geometry quality, and latency must be verified on the actual NVIDIA machine. A missing model, missing checkpoint, explicitly requested unavailable device, or failed decode produces an explicit failed job and never a sample reconstruction. The app does not promise live processing performance.
+The adapter follows the official model API. Memory use, geometry quality, and latency depend on the selected device and clip. A missing model, missing checkpoint, explicitly requested unavailable device, or failed decode produces an explicit failed job and never a sample reconstruction. The app does not promise live processing performance.
 
 ## Demo walkthrough
 
@@ -102,10 +102,11 @@ app/                  React frontend, Three.js viewer, capture controls
 components/ui/        Starter UI primitives
 backend/api.py        Uploads, jobs, state, artifact serving
 backend/worker.py     Single worker, sample generation, job execution
-backend/reconstruct.py Optional batch VGGT-Ω CUDA adapter
+backend/reconstruct.py Optional batch VGGT CUDA/MPS adapter
 backend/geometry.py   Similarity fitting, RANSAC, PLY output
 backend/store.py      SQLite metadata and immutable publication
 scripts/serve.py      Local LAN launcher and process cleanup
+scripts/download_vggt.py Public pinned checkpoint downloader
 dist/client/          Built static frontend (generated)
 data/                 Local captures and artifacts (ignored)
 tests/                Backend integration and geometry checks
