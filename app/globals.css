@@ -281,6 +281,10 @@ footer {
   background: #101c24;
   border-radius: 6px;
   margin-bottom: 15px;
+  transform: scaleY(-1);
+}
+.source-card video::-webkit-media-controls-enclosure {
+  transform: scaleY(-1);
 }
 .badge {
   display: inline-flex;

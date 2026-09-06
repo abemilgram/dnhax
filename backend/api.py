@@ -11,6 +11,11 @@ from . import store
 app = FastAPI(title="simv1 room reconstruction", version="0.1.0")
 
 
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
+
+
 @app.get("/api/state")
 def state():
     with store.connect() as db:

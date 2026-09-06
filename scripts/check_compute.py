@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -28,12 +29,24 @@ def main():
         config = model_config()
         report["model"] = config["model"]
         report["model_variant"] = config["variant"]
-        report["vggt_installed"] = importlib.util.find_spec(config["key"]) is not None
+        if config["key"] == "amb3r":
+            amb3r_root = Path(os.environ.get("AMB3R_ROOT", "/opt/amb3r"))
+            report["backend_installed"] = (
+                (amb3r_root / "amb3r/model.py").is_file()
+                and all(
+                    importlib.util.find_spec(module) is not None
+                    for module in ("spconv", "torch_scatter", "pytorch3d")
+                )
+            )
+        else:
+            report["backend_installed"] = (
+                importlib.util.find_spec(config["key"]) is not None
+            )
         checkpoint = config["checkpoint"]
         report["checkpoint"] = str(checkpoint)
         report["checkpoint_present"] = checkpoint.is_file()
         print(json.dumps(report, indent=2))
-        return 0 if report["vggt_installed"] and report["checkpoint_present"] else 2
+        return 0 if report["backend_installed"] and report["checkpoint_present"] else 2
     except Exception as exc:
         report["error"] = str(exc)
         print(json.dumps(report, indent=2))

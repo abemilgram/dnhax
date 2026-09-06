@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1.7
+# AMB3R evaluation image for this branch only. Do not point the running
+# macoslive VGGT RunPod endpoint at this Dockerfile.
 
 FROM node:22-bookworm-slim AS frontend
 
@@ -10,12 +12,20 @@ RUN npm run build
 
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
 
+ARG AMB3R_COMMIT=92c4081f910f98e683503092b85301861519175e
+ARG PYTORCH3D_REF=V0.7.8
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
+    CUDA_HOME=/usr/local/cuda \
     TORCH_CUDA_ARCH_LIST=12.0 \
-    HF_HOME=/workspace/.cache/huggingface
+    CUMM_CUDA_VERSION=12.8 \
+    CUMM_CUDA_ARCH_LIST=12.0 \
+    MAX_JOBS=4 \
+    HF_HOME=/workspace/.cache/huggingface \
+    AMB3R_ROOT=/opt/amb3r
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -31,25 +41,73 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.txt requirements-vggt.txt requirements-vggt-omega.txt ./
+# The official PyTorch 2.7.1 cu128 devel image is Python 3.11. The pinned
+# Blackwell spconv/cumm wheels below are cp311 and will not install otherwise.
+RUN python -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
+
+COPY requirements.txt requirements-vggt.txt requirements-vggt-omega.txt requirements-amb3r.txt ./
 RUN python -m pip install \
         -r requirements.txt \
         -r requirements-vggt.txt \
-        -r requirements-vggt-omega.txt
+        -r requirements-vggt-omega.txt \
+        -r requirements-amb3r.txt
+
+# AMB3R's published cu118 binaries cannot execute on Blackwell. Install the
+# matching cu128 torch-scatter wheel and a pinned SM120-capable spconv build.
+RUN python -m pip install \
+        torch-scatter==2.1.2 \
+        -f https://data.pyg.org/whl/torch-2.7.0+cu128.html \
+    && python -m pip install \
+        "https://github.com/rathaROG/cumm-gpu/releases/download/v0.9.1/cumm_cu128-0.9.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl#sha256=f61bc910a6c0f6a10a0bcebf63e8b2cfb9d2dc43e27033e4bbc31da8b055f4ba" \
+        "https://github.com/rathaROG/spconv-gpu/releases/download/v2.4.1/spconv_cu128-2.4.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl#sha256=0f19777668d55a3ba3635299efaeea279a6a322b249a1e921f9c842730bbc2bb"
+
+# AMB3R only needs PyTorch3D's KNN kernels. Pulsar is excluded because its
+# CUDA extension does not build for sm_120 in PyTorch3D 0.7.8.
+RUN git clone --branch "${PYTORCH3D_REF}" --depth 1 \
+        https://github.com/facebookresearch/pytorch3d.git /tmp/pytorch3d \
+    && python - <<'PY'
+from pathlib import Path
+path = Path("/tmp/pytorch3d/setup.py")
+text = path.read_text()
+needle = '    source_cuda = glob.glob(os.path.join(extensions_dir, "**", "*.cu"), recursive=True)\n'
+replacement = needle + '    sources = [source for source in sources if "pulsar" not in source]\n    source_cuda = [source for source in source_cuda if "pulsar" not in source]\n'
+if needle not in text:
+    raise SystemExit("PyTorch3D setup layout changed")
+path.write_text(text.replace(needle, replacement, 1))
+PY
+RUN cd /tmp/pytorch3d \
+    && FORCE_CUDA=1 python -m pip install --no-build-isolation . \
+    && rm -rf /tmp/pytorch3d
+
+# Pin AMB3R source exactly. FlashAttention 2.7.3 has no sm_120 kernel, so use
+# PointTransformerV3's upstream PyTorch attention path instead.
+RUN git clone https://github.com/HengyiWang/amb3r.git /opt/amb3r \
+    && git -C /opt/amb3r checkout "${AMB3R_COMMIT}" \
+    && python - <<'PY'
+from pathlib import Path
+path = Path("/opt/amb3r/amb3r/backend.py")
+text = path.read_text()
+needle = "self.point_transformer = PointTransformerV3()"
+replacement = 'self.point_transformer = PointTransformerV3(backbone_cfg={"enable_flash": False})'
+if needle not in text:
+    raise SystemExit("AMB3R backend layout changed")
+path.write_text(text.replace(needle, replacement, 1))
+PY
+RUN rm -rf /opt/amb3r/.git
 
 COPY . .
 COPY --from=frontend /src/dist/client /app/dist/client
 
 ENV SIMV1_DEVICE=cuda \
-    SIMV1_MODEL=vggt \
+    SIMV1_MODEL=amb3r \
     SIMV1_DATA=/workspace/simv1-data \
-    VGGT_CHECKPOINT=/workspace/models/vggt-1b/model.safetensors \
+    AMB3R_CHECKPOINT=/workspace/models/amb3r/amb3r.pt \
     SIMV1_RETENTION_HOURS=24 \
     PORT=8000
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15m --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/state', timeout=3)"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ping', timeout=3)"
 
 CMD ["python", "-m", "scripts.runpod_start"]

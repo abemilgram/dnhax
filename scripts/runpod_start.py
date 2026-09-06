@@ -40,6 +40,31 @@ def verify(path: Path, expected: str | None) -> None:
 def ensure_checkpoint() -> None:
     config = model_config()
     target = config["checkpoint"]
+    if config["key"] == "amb3r":
+        from importlib.util import module_from_spec, spec_from_file_location
+
+        spec = spec_from_file_location(
+            "download_amb3r", Path(__file__).with_name("download_amb3r.py")
+        )
+        downloader = module_from_spec(spec)
+        spec.loader.exec_module(downloader)
+        download, validate = downloader.download, downloader.validate
+
+        if target.is_file():
+            validate(target)
+            print(f"Using checkpoint {target}", flush=True)
+            return
+        if os.environ.get("SIMV1_DOWNLOAD_MODEL", "1") != "1":
+            raise RuntimeError(
+                f"Missing checkpoint and download is disabled: {target}"
+            )
+        print(
+            f"Downloading {config['model']} to persistent storage at {target}",
+            flush=True,
+        )
+        download(target)
+        return
+
     release = MODEL_RELEASES[config["key"]]
     if target.is_file():
         verify(target, release["sha256"])

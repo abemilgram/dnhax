@@ -11,7 +11,7 @@ For a containerized CUDA deployment on RunPod, see [RUNPOD.md](RUNPOD.md).
 ## What works without CUDA
 
 - Capture upload (MP4/MOV/WebM/MKV, up to 512 MB).
-- Optional browser screen/window/tab recording of a clip up to 60 seconds; nothing uploads before Submit.
+- Optional browser screen/window/tab recording; nothing uploads before Submit.
 - SQLite-backed processing queue, worker heartbeat, explicit job errors.
 - Labeled synthetic room fixture with real computed registration diagnostics.
 - Orbit/zoom viewer; source isolation, before/after transform, point size, source/RGB color.
@@ -61,7 +61,22 @@ python scripts/serve.py --cert /path/to/cert.pem --key /path/to/key.pem
 
 Open the corresponding `https://` address. Do not copy a CA private key to the clients. Click **Record screen** and select a screen, window, or tab in the browser picker. Stopping sharing finalizes the clip, just like the app’s Stop recording button. Screen capture availability depends on the browser; if the embedded browser does not support it, open the URL in Chrome or Edge. Recording is explicitly user-initiated and is never a background continuous upload.
 
-## Optional real VGGT reconstruction
+## AMB3R reconstruction on RunPod
+
+The `AMB3R` branch uses the full AMB3R model and its unordered SfM pipeline on
+CUDA. Use the pinned [RunPod image setup](RUNPOD.md); this is not a macOS
+backend. Frames from A and B enter one image pool, while simv1 retains the
+input-index manifest needed to split the resulting shared world points back
+into their sources. AMB3R-SfM requires a connected visual-overlap graph and
+does not natively model camera IDs, synchronization, dynamic objects, or
+separate disconnected maps.
+
+The released geometry remains in reconstruction units. AMB3R's metric-depth
+head does not metric-scale the SfM world points or camera translations. The
+upstream source and checkpoint also lack a stated license, so this integration
+is an evaluation build until those rights are clarified.
+
+## Optional VGGT reconstruction
 
 Approved **VGGT-Omega 1B-512** is also supported for single and joint A+B reconstruction on MPS/CUDA. See [the Omega setup instructions](MACOS.md#approved-vggt-omega-weights). Install `requirements-vggt-omega.txt` and the approved checkpoint. Auto model selection prefers installed Omega weights; set `SIMV1_MODEL=vggt` to keep public VGGT. Results record the actual model and preserve older scenes.
 
@@ -93,7 +108,7 @@ The adapter follows the official model API. Memory use, geometry quality, and la
 2. In **Alignment**, toggle Apply alignment to inspect independent frames versus registered geometry. Diagnostics are computed from the fixture's known correspondence pairs, not measured video performance.
 3. In **Explore**, isolate each source, change point size, and download original PLYs and the scene manifest.
 4. For real captures, submit one room clip to A and one to B. Both clips need recognizable shared content.
-5. Click **Reconstruct A + B together**. VGGT processes keyframes from both videos in one sequence and exports a **Joint A + B** scene with separate source labels in shared coordinates. You do not need to reconstruct the captures separately first.
+5. Click **Reconstruct A + B together**. The selected model processes keyframes from both videos together and exports a **Joint A + B** scene with separate source labels in shared coordinates. You do not need to reconstruct the captures separately first.
 6. In **Explore**, toggle A/B or enable source colors to inspect overlap. Joint predictions are not independently validated alignment measurements. If shared features are scarce, the scene displays a warning.
 7. For an optional manual correction, open **Optional landmark correction**, click **Pick pairs**, and select the same landmark in A then B for at least eight distributed pairs. Click **Fit and validate** to publish a new version. The manual correction remains a separate RANSAC similarity fit; the joint pipeline does not use RANSAC.
 
@@ -105,9 +120,9 @@ The viewer opens the latest real two-source scene when one is available. Later s
 
 ### Joint keyframe selection and limits
 
-`SIMV1_JOINT_FRAMES_PER_SOURCE` defaults to **4** (8 frames total) and permits 2–8 per source. This is independent of `SIMV1_MAX_FRAMES`, which controls single-capture jobs. The selector samples at least twelve candidates across each full clip, chooses an A/B anchor pair using reciprocal SIFT descriptor matches, then selects additional frames using temporal spread and sharpness. The match count is an appearance cue, not a geometric overlap certificate. No extra model weights are needed.
+`SIMV1_JOINT_FRAMES_PER_SOURCE` defaults to **unlimited** (every 1 fps frame). Set an integer of at least 2 to cap each source. This is independent of `SIMV1_MAX_FRAMES`, which likewise defaults to unlimited for single-capture jobs. When a cap is set, the selector samples at least twelve candidates across each full clip, chooses an A/B anchor pair using reciprocal SIFT descriptor matches, then selects additional frames using temporal spread and sharpness. The match count is an appearance cue, not a geometric overlap certificate. No extra model weights are needed.
 
-All selected A/B images enter one VGGT sequence. Splitting the output by source preserves the predicted shared coordinates without recentering or fitting a transform. New jobs write new scene artifacts; existing independent reconstructions remain unchanged. Joint manifests include selected camera frames/timestamps, source IDs, device, elapsed time, and an explicit unverified-quality note. Disjoint views, repeated textures, blur, or inconsistent depth can still produce poor geometry; the app does not claim an accepted registration merely because inference completes.
+All selected A/B images enter one model invocation. Splitting the output by source preserves the predicted shared coordinates without recentering or fitting a transform. New jobs write new scene artifacts; existing independent reconstructions remain unchanged. Joint manifests include selected camera frames/timestamps, source IDs, device, elapsed time, and an explicit unverified-quality note. Disjoint views, repeated textures, blur, or inconsistent depth can still produce poor geometry; the app does not claim an accepted registration merely because inference completes.
 
 ## Layout and containers
 
@@ -116,12 +131,14 @@ app/                  React frontend, Three.js viewer, capture controls
 components/ui/        Starter UI primitives
 backend/api.py        Uploads, jobs, state, artifact serving
 backend/worker.py     Single worker, sample generation, job execution
-backend/reconstruct.py Optional batch VGGT CUDA/MPS adapter
+backend/reconstruct.py Shared inference/export boundary
+backend/amb3r_runtime.py AMB3R and AMB3R-SfM CUDA adapter
 backend/joint.py      Joint A+B keyframe selection and reconstruction
 backend/geometry.py   Similarity fitting, RANSAC, PLY output
 backend/store.py      SQLite metadata and immutable publication
 scripts/serve.py      Local LAN launcher and process cleanup
 scripts/download_vggt.py Public pinned checkpoint downloader
+scripts/download_amb3r.py Official AMB3R checkpoint downloader
 dist/client/          Built static frontend (generated)
 data/                 Local captures and artifacts (ignored)
 tests/                Backend integration and geometry checks

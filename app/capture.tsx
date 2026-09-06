@@ -26,7 +26,6 @@ export default function Capture({
   const [error, setError] = useState('');
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preview = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (!file) {
@@ -39,7 +38,6 @@ export default function Capture({
   }, [file]);
   useEffect(
     () => () => {
-      if (timer.current) clearTimeout(timer.current);
       if (recorder.current) {
         recorder.current.onstop = null;
         if (recorder.current.state !== 'inactive') recorder.current.stop();
@@ -108,7 +106,6 @@ export default function Capture({
             { type },
           ),
         );
-        if (timer.current) clearTimeout(timer.current);
       };
       setRecording(true);
       instance.start(1000);
@@ -116,9 +113,6 @@ export default function Capture({
         preview.current.srcObject = media;
         void preview.current.play();
       }
-      timer.current = setTimeout(() => {
-        if (instance.state === 'recording') instance.stop();
-      }, 60000);
     } catch (e) {
       stream.current?.getTracks().forEach((t) => t.stop());
       setRecording(false);
@@ -216,9 +210,9 @@ export default function Capture({
         )}
       </div>
       <p className="video-note">
-        Record your camera, or choose a screen, window, or tab. Recording stops
-        after 60 seconds or when you stop sharing. Nothing is uploaded until you
-        submit. Maximum upload: 512 MB.
+        Record your camera, or choose a screen, window, or tab. Recording
+        continues until you stop it or stop sharing. Nothing is uploaded until
+        you submit. Maximum upload: 512 MB.
       </p>
       {capture && <p className="small">Stored: {capture.name}</p>}
       {error && (

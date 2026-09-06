@@ -81,7 +81,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--certificate-port", type=int, default=8001)
-    parser.add_argument("--max-frames", type=int, default=4)
+    parser.add_argument("--max-frames", type=int, default=0)
     args = parser.parse_args()
 
     config = model_config()

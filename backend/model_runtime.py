@@ -9,6 +9,7 @@ from .runtime import predict_geometry, release_memory
 class ModelRuntime:
     def __init__(self):
         self.model = self.key = self.device = None
+        self.amb3r = None
         self.loads = 0
         self.fingerprints = {}
 
@@ -24,6 +25,8 @@ class ModelRuntime:
 
     def unload(self):
         self.model = self.key = None
+        if self.amb3r is not None:
+            self.amb3r.unload()
         if self.device:
             import torch
 
@@ -86,6 +89,14 @@ class ModelRuntime:
 
     def infer(self, images, device, progress):
         import torch
+
+        config = model_config()
+        if config["key"] == "amb3r":
+            if self.amb3r is None:
+                from .amb3r_runtime import Amb3rRuntime
+
+                self.amb3r = Amb3rRuntime()
+            return self.amb3r.infer(images, config, device, progress)
 
         load_seconds = self.load(device, progress)
         start = time.perf_counter()

@@ -43,5 +43,12 @@ test('scene labels distinguish real pairs, single captures, and sample pairs', (
     sceneLabel({ ...combined, reconstruction: { method: 'joint_vggt' } }),
     'Joint A + B',
   );
+  assert.equal(
+    sceneLabel({
+      ...combined,
+      reconstruction: { method: 'joint_amb3r', model: 'AMB3R-SfM' },
+    }),
+    'Joint A + B · AMB3R',
+  );
   assert.equal(sceneLabel({ ...combined, sample: true }), 'Sample A + B');
 });

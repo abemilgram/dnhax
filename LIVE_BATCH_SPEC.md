@@ -15,7 +15,7 @@ Keep the existing React/Three.js frontend, FastAPI service, SQLite metadata, loc
 
 | Existing component | Current behavior | Required change |
 | --- | --- | --- |
-| `app/capture.tsx` | Camera/screen recording accumulates chunks, stops after 60 seconds, uploads only on Submit | Separate live mode that samples images and uploads during capture |
+| `app/capture.tsx` | Camera/screen recording accumulates chunks until stop, uploads only on Submit | Separate live mode that samples images and uploads during capture |
 | `backend/api.py` | Complete video upload; explicit reconstruct/joint requests | Session, source ownership, frame ingest, live state and stop APIs |
 | `backend/store.py` | Durable FIFO queue, atomic claiming, immutable scene records | Versioned migrations, bounded scheduling, ownership leases, durable batch/publication links |
 | `backend/reconstruct.py` | `infer_images()` loads and releases a model on every call | Worker-owned model runtime reused across jobs |

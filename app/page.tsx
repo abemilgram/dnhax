@@ -126,7 +126,8 @@ export default function Home() {
     (s) => !s.sample && isCombinedScene(s),
   );
   const diagnostics = scene?.diagnostics;
-  const jointReconstruction = scene?.reconstruction?.method === 'joint_vggt';
+  const jointReconstruction =
+    scene?.reconstruction?.method?.startsWith('joint_') ?? false;
   const active = state.jobs.some((j) =>
     ['queued', 'running'].includes(j.status),
   );

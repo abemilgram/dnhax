@@ -9,8 +9,8 @@ export type Cloud = {
   cameras?: {
     frame: string;
     t: number;
-    intrinsics: number[][];
-    world_to_camera: number[][];
+    intrinsics?: number[][];
+    world_to_camera?: number[][];
   }[];
 };
 export type Diagnostics = {
@@ -39,7 +39,7 @@ export type Scene = {
   scale_source: string;
   provenance: string;
   reconstruction?: {
-    method: 'joint_vggt';
+    method: 'joint_vggt' | 'joint_amb3r';
     model?: string;
     model_variant?: string;
     frames_per_source: number[];
