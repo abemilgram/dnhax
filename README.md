@@ -61,6 +61,8 @@ Open the corresponding `https://` address. Do not copy a CA private key to the c
 
 ## Optional real VGGT reconstruction
 
+Approved **VGGT-Omega 1B-512** is also supported for single and joint A+B reconstruction on MPS/CUDA. See [the Omega setup instructions](MACOS.md#approved-vggt-omega-weights). Install `requirements-vggt-omega.txt` and the approved checkpoint. Auto model selection prefers installed Omega weights; set `SIMV1_MODEL=vggt` to keep public VGGT. Results record the actual model and preserve older scenes.
+
 The sample path is independent of the model. No model weights are bundled or downloaded automatically.
 
 1. For NVIDIA CUDA, install the matching PyTorch build using the [official PyTorch installer](https://pytorch.org/get-started/locally/) in the worker's Python environment. For Apple MPS, follow [MACOS.md](MACOS.md).

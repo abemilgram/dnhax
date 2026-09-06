@@ -67,7 +67,25 @@ The generated certificate, private key, and public phone certificate stay under 
 
 The MPS device check and real checkpoint inference must pass on the target Mac before treating the setup as ready. Reconstruction accuracy, memory consumption, and latency still depend on the capture and selected frame count. `VALIDATION.md` records the checks performed for this branch.
 
-Existing cached reconstructions are reused; submit a new capture when comparing devices or frame settings. `compute_device`, `frame_count`, and precision are stored on new reconstruction records.
+Existing single-capture reconstructions are cached separately for each model; submit a new capture when comparing devices, frame settings, or custom checkpoints of the same model. Previously published geometry remains unchanged. Model identity, `compute_device`, `frame_count`, and precision are stored on new reconstruction records.
+
+## Approved VGGT-Omega weights
+
+Once your Hugging Face account has access to `facebook/VGGT-Omega`, install the pinned Omega package alongside public VGGT:
+
+```bash
+.venv/bin/python -m pip install -r requirements-vggt-omega.txt
+.venv/bin/hf auth login
+.venv/bin/python scripts/download_vggt_omega.py
+SIMV1_MODEL=vggt_omega .venv/bin/python scripts/check_compute.py
+SIMV1_MODEL=vggt_omega .venv/bin/python scripts/serve_macos_https.py --max-frames 2
+```
+
+Alternatively download **vggt_omega_1b_512.pt** from the approved model's Files page and place it at `models/vggt-omega/vggt_omega_1b_512.pt`. The official release SHA-256 is `c02da418b18bb01d0392598d3f6147366bcde1bb70fd08a5e3bf7925b0667934` (4,576,706,117 bytes). The 256 text-alignment and reproduction checkpoints are different variants. Omega weights use the FAIR Noncommercial Research License linked on the model page.
+
+`SIMV1_MODEL=auto` (default) prefers installed Omega weights, otherwise public VGGT. `SIMV1_MODEL=vggt` explicitly keeps the public model. Set `VGGT_OMEGA_CHECKPOINT` for an alternate path to the approved 1B-512 checkpoint. Export these variables in your shell; `.env.example` is documentation and is not automatically loaded. The HTTPS launcher resolves its model at startup, so restart after installing weights. A missing or incompatible selected checkpoint fails explicitly without substituting another model.
+
+Omega uses its own 512-resolution preprocessing and camera/depth heads, with float32 inference on Apple MPS. **Reconstruct A + B together** runs both captures in one Omega sequence. New results are labeled **Joint A + B · VGGT-Ω**; previous VGGT scenes remain available. Approval grants access to the weights; it does not validate predicted alignment.
 
 ### Joint A+B on the Apple GPU
 

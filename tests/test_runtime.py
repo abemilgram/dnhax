@@ -87,3 +87,30 @@ def test_cuda_forward_is_preserved():
 
     sentinel = object()
     assert predict_geometry(lambda images: sentinel, None, "cuda") is sentinel
+
+
+def test_omega_forward_preserves_sequence_and_uses_omega_head_contract(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from backend.runtime import predict_geometry
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Omega MPS/CPU inference touched CUDA")
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", forbidden)
+
+    class Model:
+        training = False
+        def aggregator(self, images):
+            assert images.shape == (1, 4, 3, 8, 8)
+            return [None, images.mean(dim=(-2, -1))], 17
+        def camera_head(self, features, patch_token_start):
+            assert patch_token_start == 17
+            return features[-1]
+        def dense_head(self, features, images, patch_token_start):
+            assert patch_token_start == 17
+            return images.mean(2)[..., None], torch.ones((1, 4, 8, 8))
+        __call__ = forbidden
+
+    result = predict_geometry(Model(), torch.rand(4, 3, 8, 8), "cpu", "vggt_omega")
+    assert result["pose_enc"].shape == (1, 4, 3)
+    assert result["depth"].shape == (1, 4, 8, 8, 1)
+    assert torch.isfinite(result["depth"]).all()

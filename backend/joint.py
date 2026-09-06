@@ -117,6 +117,8 @@ def reconstruct_joint(captures, folder, progress):
         offset += len(frames)
     return clouds, {
         "method": "joint_vggt",
+        "model": prediction["model"],
+        "model_variant": prediction["model_variant"],
         "frames_per_source": [len(frames) for frames in selected],
         "anchor_times": [frames[0]["t"] for frames in selected],
         "anchor_reciprocal_matches": matches,

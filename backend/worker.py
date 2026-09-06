@@ -108,7 +108,7 @@ def process(job):
             "clouds": [cloud],
             "diagnostics": None,
             "scale_source": "None — arbitrary reconstruction units",
-            "provenance": "VGGT-1B independent video reconstruction",
+            "provenance": f"{cloud['model']} independent video reconstruction",
         }
         store.publish(scene)
     elif kind == "joint":
@@ -127,7 +127,7 @@ def process(job):
             "title": "Joint A + B", "clouds": clouds, "diagnostics": None,
             "reconstruction": reconstruction,
             "scale_source": "None — arbitrary reconstruction units",
-            "provenance": "A and B reconstructed together by VGGT in one shared coordinate system. Alignment quality is unverified.",
+            "provenance": f"A and B reconstructed together by {reconstruction['model']} in one shared coordinate system. Alignment quality is unverified.",
         })
     elif kind == "pair":
         store.update(

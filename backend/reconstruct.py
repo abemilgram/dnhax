@@ -1,14 +1,13 @@
 """VGGT inference and export in the coordinate system shared by each input sequence."""
 
 import json
-import os
 import shutil
 import subprocess
-from pathlib import Path
 import numpy as np
 from . import store
 from .geometry import depth_edge_mask
 from .runtime import select_device, frame_limit, predict_geometry, release_memory
+from .models import model_config
 
 
 def compute_device():
@@ -21,32 +20,36 @@ def compute_device():
 
 def infer_images(images, device, progress):
     """One sequence / one inference call, including frames from two captures."""
+    config = model_config()
+    omega = config["key"] == "vggt_omega"
+    checkpoint = config["checkpoint"]
+    if not checkpoint.is_file():
+        raise RuntimeError(
+            f"Missing {config['model']} checkpoint: {checkpoint}. Run {config['download']}."
+        )
     try:
         import torch
         from safetensors.torch import load_file
-        from vggt.models.vggt import VGGT
-        from vggt.utils.load_fn import load_and_preprocess_images
-        from vggt.utils.pose_enc import pose_encoding_to_extri_intri
+        if omega:
+            from vggt_omega.models import VGGTOmega as Model
+            from vggt_omega.utils.load_fn import load_and_preprocess_images
+            from vggt_omega.utils.pose_enc import encoding_to_camera as decode_camera
+        else:
+            from vggt.models.vggt import VGGT as Model
+            from vggt.utils.load_fn import load_and_preprocess_images
+            from vggt.utils.pose_enc import pose_encoding_to_extri_intri as decode_camera
     except ImportError as exc:
         raise RuntimeError(
-            "Install PyTorch and the official vggt package. See MACOS.md or README.md."
+            f"Install PyTorch and the official {config['key']} package. See MACOS.md."
         ) from exc
-    checkpoint = Path(os.environ.get(
-        "VGGT_CHECKPOINT",
-        str(Path(__file__).resolve().parents[1] / "models" / "vggt-1b" / "model.safetensors"),
-    ))
-    if not checkpoint.is_file():
-        raise RuntimeError(
-            "Download the public VGGT-1B checkpoint with scripts/download_vggt.py or set VGGT_CHECKPOINT."
-        )
     model = inputs = predictions = extrinsics = intrinsics = state = None
     try:
-        progress("Loading VGGT-1B weights")
-        model = VGGT(enable_point=False, enable_track=False).eval()
+        progress(f"Loading {config['model']} {config['variant']} weights")
+        model = (Model() if omega else Model(enable_point=False, enable_track=False)).eval()
         state = (load_file(str(checkpoint), device="cpu")
                  if checkpoint.suffix == ".safetensors"
                  else torch.load(str(checkpoint), map_location="cpu", weights_only=True))
-        incompatible = model.load_state_dict(state, strict=False)
+        incompatible = model.load_state_dict(state, strict=omega)
         unexpected = [key for key in incompatible.unexpected_keys
                       if not key.startswith(("point_head.", "track_head."))]
         if incompatible.missing_keys or unexpected:
@@ -56,16 +59,18 @@ def infer_images(images, device, progress):
             )
         state = None
         model = model.to(device=device, dtype=torch.float32)
-        inputs = load_and_preprocess_images([str(p) for p in images], mode="crop").to(
+        preprocessing = {"image_resolution": 512} if omega else {"mode": "crop"}
+        inputs = load_and_preprocess_images([str(p) for p in images], **preprocessing).to(
             device=device, dtype=torch.float32
         )
         progress(f"Predicting {len(images)} frames together on {device.upper()}")
         with torch.inference_mode():
-            predictions = predict_geometry(model, inputs, device)
-            extrinsics, intrinsics = pose_encoding_to_extri_intri(
+            predictions = predict_geometry(model, inputs, device, config["key"])
+            extrinsics, intrinsics = decode_camera(
                 predictions["pose_enc"], predictions["images"].shape[-2:]
             )
         return {
+            "model": config["model"], "model_variant": config["variant"],
             "depth": predictions["depth"].detach().float().cpu().numpy()[0, ..., 0],
             "confidence": predictions["depth_conf"].detach().float().cpu().numpy()[0],
             "extrinsics": extrinsics.detach().float().cpu().numpy()[0],
@@ -124,7 +129,8 @@ def export_cloud(folder, capture, frames, prediction, indices, device, **extra):
     record = cloud_record(folder, points, colors, capture["source"],
                           capture_id=capture["id"], cameras=cameras,
                           compute_device=device, frame_count=len(frames),
-                          precision="float32", model="facebook/VGGT-1B", **extra)
+                          precision="float32", model=prediction["model"],
+                          model_variant=prediction["model_variant"], **extra)
     (folder / "cloud.json").write_text(json.dumps(record, allow_nan=False))
     return record
 
@@ -134,11 +140,16 @@ def reconstruct(capture, progress):
     max_frames = frame_limit(device)
     if not shutil.which("ffmpeg"):
         raise RuntimeError("FFmpeg is required on the processing machine.")
-    folder = store.ROOT / "reconstructions" / capture["id"]
+    config = model_config()
+    capture_folder = store.ROOT / "reconstructions" / capture["id"]
+    # Immutable model-specific artifacts keep previously published scenes intact.
+    folder = capture_folder / config["key"]
     frames = folder / "frames"
     frames.mkdir(parents=True, exist_ok=True)
     if (folder / "cloud.json").exists():
-        return json.loads((folder / "cloud.json").read_text())
+        record = json.loads((folder / "cloud.json").read_text())
+        (capture_folder / "cloud.json").write_text(json.dumps(record, allow_nan=False))
+        return record
     progress(f"Extracting up to {max_frames} frames for {device.upper()}")
     result = subprocess.run([
         "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", capture["path"],
@@ -152,6 +163,8 @@ def reconstruct(capture, progress):
         raise RuntimeError("Capture needs at least two usable frames. Submit a longer walkthrough.")
     prediction = infer_images(images, device, progress)
     progress("Exporting geometry and source cameras")
-    return export_cloud(folder, capture,
+    record = export_cloud(folder, capture,
                         [{"path": p, "t": float(i)} for i, p in enumerate(images)],
                         prediction, list(range(len(images))), device)
+    (capture_folder / "cloud.json").write_text(json.dumps(record, allow_nan=False))
+    return record

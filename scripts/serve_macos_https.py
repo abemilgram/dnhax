@@ -10,6 +10,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from backend.models import model_config
+
 TLS_DIR = ROOT / "work" / "certs"
 PHONE_CERT_DIR = ROOT / "work" / "phone-cert"
 
@@ -81,11 +84,13 @@ def main() -> None:
     parser.add_argument("--max-frames", type=int, default=4)
     args = parser.parse_args()
 
+    config = model_config()
     address = lan_address()
     cert, key, phone_ca = create_certificates(address)
     env = os.environ.copy()
     env.setdefault("SIMV1_DEVICE", "mps")
     env.setdefault("SIMV1_MAX_FRAMES", str(args.max_frames))
+    env["SIMV1_MODEL"] = config["key"]
 
     certificate_server = subprocess.Popen(
         [
@@ -106,14 +111,11 @@ def main() -> None:
     )
     print(f"Mac app: https://127.0.0.1:{args.port}", flush=True)
     print(f"Phone app: https://{address}:{args.port}", flush=True)
-    checkpoint = Path(
-        env.get(
-            "VGGT_CHECKPOINT", str(ROOT / "models" / "vggt-1b" / "model.safetensors")
-        )
-    )
+    checkpoint = config["checkpoint"]
+    print(f"Model: {config['model']} {config['variant']}", flush=True)
     if not checkpoint.is_file():
         print(
-            "VGGT checkpoint is missing; run .venv/bin/python scripts/download_vggt.py.",
+            f"Checkpoint is missing; run .venv/bin/python {config['download']}.",
             flush=True,
         )
 

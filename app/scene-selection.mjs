@@ -13,7 +13,9 @@ export function sceneLabel(scene) {
   return scene.sample
     ? 'Sample A + B'
     : scene.reconstruction?.method === 'joint_vggt'
-      ? 'Joint A + B'
+      ? scene.reconstruction.model === 'facebook/VGGT-Omega'
+        ? 'Joint A + B · VGGT-Ω'
+        : 'Joint A + B'
       : isCombinedScene(scene)
         ? 'Combined A + B'
         : scene.title;

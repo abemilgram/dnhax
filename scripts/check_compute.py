@@ -2,13 +2,13 @@
 
 import importlib.util
 import json
-import os
 import platform
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.runtime import select_device, frame_limit, release_memory
+from backend.models import model_config
 
 
 def main():
@@ -25,18 +25,11 @@ def main():
         del sample, result
         release_memory(torch, device)
         report["device_smoke_test"] = "passed"
-        report["vggt_installed"] = importlib.util.find_spec("vggt") is not None
-        checkpoint = Path(
-            os.environ.get(
-                "VGGT_CHECKPOINT",
-                str(
-                    Path(__file__).resolve().parents[1]
-                    / "models"
-                    / "vggt-1b"
-                    / "model.safetensors"
-                ),
-            )
-        )
+        config = model_config()
+        report["model"] = config["model"]
+        report["model_variant"] = config["variant"]
+        report["vggt_installed"] = importlib.util.find_spec(config["key"]) is not None
+        checkpoint = config["checkpoint"]
         report["checkpoint"] = str(checkpoint)
         report["checkpoint_present"] = checkpoint.is_file()
         print(json.dumps(report, indent=2))

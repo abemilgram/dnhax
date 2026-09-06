@@ -40,6 +40,8 @@ export type Scene = {
   provenance: string;
   reconstruction?: {
     method: 'joint_vggt';
+    model?: string;
+    model_variant?: string;
     frames_per_source: number[];
     anchor_times: number[];
     anchor_reciprocal_matches: number;
