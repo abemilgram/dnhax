@@ -8,6 +8,22 @@ For a containerized CUDA deployment on RunPod, see [RUNPOD.md](RUNPOD.md).
 
 **Live batch capture is now available alongside submitted clips. See [LIVE_PROCESSING.md](LIVE_PROCESSING.md) for setup and limits. Live AR overlays, automatic MASt3R matching, VLM analysis, metric calibration and persistent whole-room fusion are not implemented.**
 
+## Tactical Brain golden-tape demo
+
+The default interface is a deterministic six-second replay over an original
+fictional metric twin. It contains no CS2 entity transforms or copied map
+geometry, and it provides no targeting, auto-aim, or automatic movement
+output. A live detector and calibration adapter are future work; the current
+demo reads only the checked-in golden tape.
+
+Run the API and frontend as described under Development, then use **Start**,
+**Pause**, **Restart**, or the 0.1-second seek slider. The frontend reads
+`GET /api/tactical/state`, resumes updates from
+`GET /api/tactical/events?since=<revision>`, and posts playback changes to
+`/api/tactical/start`, `/pause`, `/restart`, and `/seek`. Use the top mode
+switch to open the existing **Reconstruction Lab** without running its polling
+or capture components in Tactical Brain mode.
+
 ## What works without CUDA
 
 - Capture upload (MP4/MOV/WebM/MKV, up to 512 MB).
