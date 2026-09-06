@@ -128,13 +128,14 @@ export default function Home() {
   const active = state.jobs.some((j) =>
     ['queued', 'running'].includes(j.status),
   );
+  const isLiveScene = Boolean(scene?.live);
   useEffect(() => {
-    if (!scene?.live) setVisible({ A: true, B: true });
+    if (!isLiveScene) setVisible({ A: true, B: true });
     setPickSource(undefined);
     pendingTarget.current = null;
     setPairs({ source_points: [], target_points: [] });
     setLandmarks('');
-  }, [scene?.id]);
+  }, [scene?.id, isLiveScene]);
   async function act(path: string, body: unknown = {}) {
     setBusy(true);
     setError('');

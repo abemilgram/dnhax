@@ -180,7 +180,7 @@ def recover():
 
 def process(job):
     from .reconstruct import compute_device, infer_images, export_cloud
-    from .live_geometry import continuity, apply_similarity
+    from .live_geometry import continuity, apply_similarity, camera_locations
 
     started = time.perf_counter()
     with store.connect() as db:
@@ -316,6 +316,7 @@ def process(job):
             "batch": batch["number"],
             "segment": segment,
             "frame_ids": ids,
+            "camera_locations": camera_locations(prediction, frames),
             "continuity": detail,
             "transform": matrix.tolist(),
             "model": prediction["model"],

@@ -9,7 +9,7 @@ import shutil
 import time
 from typing import Literal
 import numpy as np
-from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from . import store
 from .models import model_config
@@ -419,6 +419,26 @@ def scenes(identity: str, cursor: int = 1000000000):
         "scenes": [json.loads(r["manifest"]) for r in rows],
         "cursor": rows[-1]["number"] if rows else None,
     }
+
+
+@router.get("/sessions/{identity}/camera-locations")
+def locations(identity: str, after_batch: int = Query(default=0, ge=0)):
+    """Poll committed camera batches; scene_id joins each update to its geometry."""
+    with store.connect() as db:
+        session(db, identity)
+        rows = db.execute(
+            "SELECT b.number,s.manifest FROM live_batches b JOIN scenes s ON s.id=b.scene_id "
+            "WHERE b.session_id=? AND b.status='completed' AND b.number>? "
+            "ORDER BY b.number LIMIT 20", (identity, after_batch),
+        ).fetchall()
+    updates = []
+    for row in rows:
+        manifest = json.loads(row["manifest"])
+        live = manifest.get("live", {})
+        if "camera_locations" in live:
+            updates.append({"scene_id": manifest["id"], "batch": row["number"],
+                            "segment": live["segment"], **live["camera_locations"]})
+    return {"updates": updates, "cursor": rows[-1]["number"] if rows else after_batch}
 
 
 @router.post("/sessions/{identity}/scenes/{scene_id}/pin")

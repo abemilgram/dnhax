@@ -29,6 +29,21 @@ export type Diagnostics = {
   threshold: number;
   spatial_extent: number[];
 };
+export type CameraLocationSample = {
+  frame_id: number;
+  source: string;
+  epoch: string;
+  seq: number;
+  captured: number;
+  received: number;
+  position: number[];
+  camera_to_world: number[][];
+};
+export type CameraLocations = {
+  coordinate_system: string;
+  units: string;
+  samples: CameraLocationSample[];
+};
 export type Scene = {
   id: string;
   created: number;
@@ -56,6 +71,7 @@ export type Scene = {
     segment: string;
     elapsed_seconds: number;
     continuity: { status: string; reason: string };
+    camera_locations?: CameraLocations;
   };
   landmarks?: { source_points: number[][]; target_points: number[][] };
 };

@@ -4,6 +4,34 @@ import numpy as np
 from .geometry import depth_edge_mask, register, transform
 
 
+def camera_locations(prediction, frames):
+    """Camera poses in the same segment coordinates as the exported geometry.
+
+    Extrinsics map world to OpenCV camera coordinates (right, down, forward).
+    These poses are relative estimates, not geographic coordinates or meters.
+    Call only after applying the batch's continuity similarity.
+    """
+    extrinsics = np.asarray(prediction["extrinsics"], dtype=float)
+    if extrinsics.shape != (len(frames), 3, 4) or not np.isfinite(extrinsics).all():
+        raise ValueError("Invalid live camera extrinsics.")
+    samples = []
+    for frame, ex in zip(frames, extrinsics):
+        rotation = ex[:, :3]
+        if not np.allclose(rotation @ rotation.T, np.eye(3), atol=1e-3) or not np.isclose(np.linalg.det(rotation), 1, atol=1e-3):
+            raise ValueError("Live camera rotation must be a proper rotation.")
+        pose = np.eye(4)
+        pose[:3, :3] = rotation.T
+        pose[:3, 3] = -rotation.T @ ex[:, 3]
+        samples.append({
+            "frame_id": frame["id"],
+            **{key: frame[key] for key in ("source", "epoch", "seq", "captured", "received")},
+            "position": pose[:3, 3].tolist(),
+            "camera_to_world": pose.tolist(),
+        })
+    samples.sort(key=lambda sample: (sample["source"], sample["epoch"], sample["seq"]))
+    return {"coordinate_system": "segment_world", "units": "arbitrary", "samples": samples}
+
+
 def world_pixels(prediction, index):
     d = prediction["depth"][index]
     h, w = d.shape

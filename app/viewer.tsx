@@ -3,8 +3,310 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, ScanLine } from 'lucide-react';
-import type { Scene } from './types';
+import { Camera as CameraIcon, RotateCcw, ScanLine } from 'lucide-react';
+import type { CameraLocationSample, Scene } from './types';
+
+type CameraOverlaySample = {
+  object: THREE.Group;
+  pose: THREE.Matrix4;
+  source: string;
+};
+type CameraOverlayTrajectory = {
+  object: THREE.Line;
+  transform: THREE.Matrix4;
+  source: string;
+};
+type CameraOverlay = {
+  group: THREE.Group;
+  samples: CameraOverlaySample[];
+  trajectories: CameraOverlayTrajectory[];
+  transforms: Map<string, THREE.Matrix4>;
+  latest: Map<string, CameraLocationSample>;
+};
+
+const SOURCE_COLORS = [
+  0x55c6aa, 0xe3a871, 0x8ea9e8, 0xd08bd7, 0xe8d273, 0x83c99b,
+];
+
+function sourceColor(source: string) {
+  if (source === 'A') return SOURCE_COLORS[0];
+  if (source === 'B') return SOURCE_COLORS[1];
+  let hash = 0;
+  for (let i = 0; i < source.length; i++)
+    hash = (hash * 31 + source.charCodeAt(i)) | 0;
+  return SOURCE_COLORS[Math.abs(hash) % SOURCE_COLORS.length];
+}
+
+function matrixFromRows(value: unknown): THREE.Matrix4 | null {
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const rows = value as unknown[];
+  if (!rows.every((row) => Array.isArray(row) && row.length === 4)) return null;
+  const values = rows.flat() as unknown[];
+  if (
+    !values.every(
+      (entry) => typeof entry === 'number' && Number.isFinite(entry),
+    )
+  )
+    return null;
+  // Matrix4.set takes values in row-major order, matching the manifest.
+  return new THREE.Matrix4().set(
+    ...(values as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ]),
+  );
+}
+
+function positionFromSample(sample: CameraLocationSample) {
+  if (!Array.isArray(sample.position) || sample.position.length < 3)
+    return null;
+  if (!sample.position.slice(0, 3).every((value) => Number.isFinite(value)))
+    return null;
+  return new THREE.Vector3(
+    sample.position[0],
+    sample.position[1],
+    sample.position[2],
+  );
+}
+
+function formatCoordinate(value: number) {
+  if (
+    Math.abs(value) >= 10000 ||
+    (Math.abs(value) > 0 && Math.abs(value) < 0.001)
+  )
+    return value.toExponential(2);
+  return value.toFixed(3);
+}
+
+function setTransform(object: THREE.Object3D, matrix: THREE.Matrix4) {
+  object.matrixAutoUpdate = false;
+  object.matrix.copy(matrix);
+  object.matrixWorldNeedsUpdate = true;
+}
+
+function disposeMaterial(material: THREE.Material) {
+  material.dispose();
+}
+
+function disposeObjectResources(root: THREE.Object3D) {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  root.traverse((object) => {
+    if ('geometry' in object && object.geometry instanceof THREE.BufferGeometry)
+      geometries.add(object.geometry);
+    if ('material' in object) {
+      const material = object.material;
+      if (Array.isArray(material))
+        material.forEach((entry) => materials.add(entry));
+      else if (material instanceof THREE.Material) materials.add(material);
+    }
+  });
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach(disposeMaterial);
+}
+
+function latestSamples(samples: CameraLocationSample[]) {
+  const latest = new Map<string, CameraLocationSample>();
+  for (const sample of samples) {
+    if (
+      !sample ||
+      typeof sample.source !== 'string' ||
+      !positionFromSample(sample)
+    )
+      continue;
+    const previous = latest.get(sample.source);
+    if (
+      !previous ||
+      (sample.epoch === previous.epoch
+        ? sample.seq > previous.seq
+        : sample.received > previous.received)
+    )
+      latest.set(sample.source, sample);
+  }
+  return latest;
+}
+
+function sortedTrajectories(samples: CameraLocationSample[]) {
+  const groups = new Map<string, CameraLocationSample[]>();
+  samples.forEach((sample) => {
+    if (typeof sample.source !== 'string' || typeof sample.epoch !== 'string')
+      return;
+    if (!positionFromSample(sample)) return;
+    const key = `${sample.source}\u0000${sample.epoch}`;
+    const group = groups.get(key) || [];
+    group.push(sample);
+    groups.set(key, group);
+  });
+  return [...groups.values()].map((group) =>
+    group.sort((a, b) => a.seq - b.seq || a.received - b.received),
+  );
+}
+
+function updateCameraOverlay(
+  overlay: CameraOverlay,
+  aligned: boolean,
+  visible: Record<string, boolean>,
+  showCameras: boolean,
+) {
+  overlay.group.visible = showCameras;
+  for (const sample of overlay.samples) {
+    const transform = overlay.transforms.get(sample.source);
+    const matrix =
+      aligned && transform
+        ? transform.clone().multiply(sample.pose)
+        : sample.pose;
+    setTransform(sample.object, matrix);
+    sample.object.visible = visible[sample.source] !== false;
+  }
+  for (const trajectory of overlay.trajectories) {
+    setTransform(
+      trajectory.object,
+      aligned ? trajectory.transform : new THREE.Matrix4(),
+    );
+    trajectory.object.visible = visible[trajectory.source] !== false;
+  }
+}
+
+function createCameraOverlay(
+  samples: CameraLocationSample[],
+  transforms: Map<string, THREE.Matrix4>,
+  scale: number,
+) {
+  const group = new THREE.Group();
+  group.name = 'camera-locations';
+  const overlay: CameraOverlay = {
+    group,
+    samples: [],
+    trajectories: [],
+    transforms,
+    latest: latestSamples(samples),
+  };
+  const markerRadius = Math.max(scale * 0.018, 0.001);
+  const frustumDepth = Math.max(scale * 0.16, markerRadius * 5);
+  const frustumHalfWidth = Math.max(scale * 0.085, markerRadius * 3);
+  const frustumHalfHeight = Math.max(scale * 0.06, markerRadius * 2);
+  const markerGeometry = new THREE.SphereGeometry(markerRadius, 12, 8);
+  // Predicted poses use OpenCV camera axes: +Z points forward.
+  const frustumVertices = new Float32Array([
+    0,
+    0,
+    0,
+    -frustumHalfWidth,
+    frustumHalfHeight,
+    frustumDepth,
+    0,
+    0,
+    0,
+    frustumHalfWidth,
+    frustumHalfHeight,
+    frustumDepth,
+    0,
+    0,
+    0,
+    frustumHalfWidth,
+    -frustumHalfHeight,
+    frustumDepth,
+    0,
+    0,
+    0,
+    -frustumHalfWidth,
+    -frustumHalfHeight,
+    frustumDepth,
+    -frustumHalfWidth,
+    frustumHalfHeight,
+    frustumDepth,
+    frustumHalfWidth,
+    frustumHalfHeight,
+    frustumDepth,
+    frustumHalfWidth,
+    frustumHalfHeight,
+    frustumDepth,
+    frustumHalfWidth,
+    -frustumHalfHeight,
+    frustumDepth,
+    frustumHalfWidth,
+    -frustumHalfHeight,
+    frustumDepth,
+    -frustumHalfWidth,
+    -frustumHalfHeight,
+    frustumDepth,
+    -frustumHalfWidth,
+    -frustumHalfHeight,
+    frustumDepth,
+    -frustumHalfWidth,
+    frustumHalfHeight,
+    frustumDepth,
+  ]);
+  for (const sample of samples) {
+    const position = positionFromSample(sample);
+    const pose = matrixFromRows(sample.camera_to_world);
+    if (!position || !pose) continue;
+    // Position is the authoritative location field. Keep orientation from the
+    // pose matrix while preventing stale matrix translation from moving it.
+    pose.setPosition(position);
+    const color = sourceColor(sample.source);
+    const marker = new THREE.Mesh(
+      markerGeometry.clone(),
+      new THREE.MeshBasicMaterial({ color, toneMapped: false }),
+    );
+    const frustumGeometry = new THREE.BufferGeometry();
+    frustumGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(frustumVertices.slice(), 3),
+    );
+    const frustum = new THREE.LineSegments(
+      frustumGeometry,
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.78 }),
+    );
+    const cameraObject = new THREE.Group();
+    cameraObject.name = `camera-${sample.source}-${sample.epoch}-${sample.seq}`;
+    cameraObject.userData.source = sample.source;
+    cameraObject.add(marker, frustum);
+    setTransform(cameraObject, pose);
+    group.add(cameraObject);
+    overlay.samples.push({ object: cameraObject, pose, source: sample.source });
+  }
+  for (const trajectory of sortedTrajectories(samples)) {
+    if (trajectory.length < 2) continue;
+    const geometry = new THREE.BufferGeometry().setFromPoints(
+      trajectory.map((sample) => positionFromSample(sample)!),
+    );
+    const source = trajectory[0].source;
+    const line = new THREE.Line(
+      geometry,
+      new THREE.LineBasicMaterial({
+        color: sourceColor(source),
+        transparent: true,
+        opacity: 0.5,
+      }),
+    );
+    line.name = `trajectory-${source}-${trajectory[0].epoch}`;
+    line.userData.source = source;
+    setTransform(line, new THREE.Matrix4());
+    group.add(line);
+    overlay.trajectories.push({
+      object: line,
+      transform: transforms.get(source)?.clone() || new THREE.Matrix4(),
+      source,
+    });
+  }
+  markerGeometry.dispose();
+  return overlay;
+}
 
 export default function Viewer({
   scene,
@@ -25,6 +327,7 @@ export default function Viewer({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const objects = useRef<THREE.Points[]>([]);
+  const cameraOverlay = useRef<CameraOverlay | null>(null);
   const context = useRef<{
     world: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -35,6 +338,13 @@ export default function Viewer({
   const reset = useRef<() => void>(() => {});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showCameras, setShowCameras] = useState(Boolean(scene.live));
+  const [cameraReadouts, setCameraReadouts] = useState<CameraLocationSample[]>(
+    [],
+  );
+  const cameraSceneKind = useRef<boolean | null>(Boolean(scene.live));
+  const showCamerasRef = useRef(showCameras);
+  showCamerasRef.current = showCameras;
   const pick = useRef({ onPick, pickSource });
   pick.current = { onPick, pickSource };
   const setupState = useRef({ scene, aligned, visible, pointSize });
@@ -66,6 +376,7 @@ export default function Viewer({
     world.add(grid);
     context.current = { world, camera, controls, grid };
     objects.current = [];
+    cameraOverlay.current = null;
     let frame = 0;
     function draw() {
       if (disposed) return;
@@ -128,17 +439,12 @@ export default function Viewer({
       controls.dispose();
       renderer.domElement.removeEventListener('pointerdown', down);
       renderer.domElement.removeEventListener('pointerup', click);
-      world.traverse((o) => {
-        if (o instanceof THREE.Points || o instanceof THREE.LineSegments) {
-          o.geometry.dispose();
-          const mats = Array.isArray(o.material) ? o.material : [o.material];
-          mats.forEach((m) => m.dispose());
-        }
-      });
+      disposeObjectResources(world);
       context.current = null;
       renderer.dispose();
       renderer.domElement.remove();
       objects.current = [];
+      cameraOverlay.current = null;
     };
   }, []);
   useEffect(() => {
@@ -156,6 +462,8 @@ export default function Viewer({
     setLoading(true);
     setError('');
     async function load() {
+      const next: THREE.Points[] = [];
+      let nextOverlay: CameraOverlay | null = null;
       try {
         const loaded = await Promise.all(
           snapshot.clouds.map(async (cloud) => {
@@ -176,7 +484,7 @@ export default function Viewer({
           }),
         );
         if (disposed) return;
-        const next: THREE.Points[] = [];
+        const transforms = new Map<string, THREE.Matrix4>();
         for (const { cloud, positions, colors } of loaded) {
           const geometry = new THREE.BufferGeometry();
           geometry.setAttribute(
@@ -215,56 +523,83 @@ export default function Viewer({
             );
           };
           const points = new THREE.Points(geometry, material);
+          const transform =
+            matrixFromRows(cloud.transform) || new THREE.Matrix4();
+          transforms.set(cloud.source, transform.clone());
           points.userData = {
             source: cloud.source,
-            transform: cloud.transform,
+            transform,
             spacing,
           };
-          points.matrixAutoUpdate = false;
-          points.matrix.set(
-            ...(cloud.transform.flat() as [
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-              number,
-            ]),
+          setTransform(
+            points,
+            initialAligned ? transform : new THREE.Matrix4(),
           );
-          if (!initialAligned) points.matrix.identity();
           points.visible = initialVisible[cloud.source] !== false;
           next.push(points);
         }
-        const previous = objects.current;
-        next.forEach((points) => world.add(points));
-        objects.current = next;
-        previous.forEach((points) => {
-          world.remove(points);
-          points.geometry.dispose();
-          const materials = Array.isArray(points.material)
-            ? points.material
-            : [points.material];
-          materials.forEach((material) => material.dispose());
-        });
         const bounds = new THREE.Box3();
-        objects.current.forEach((o) => {
+        next.forEach((o) => {
           o.updateMatrixWorld(true);
           bounds.union(new THREE.Box3().setFromObject(o));
         });
-        const center = bounds.getCenter(new THREE.Vector3());
-        const size = Math.max(bounds.getSize(new THREE.Vector3()).length(), 1);
+        const center = bounds.isEmpty()
+          ? new THREE.Vector3()
+          : bounds.getCenter(new THREE.Vector3());
+        const size = bounds.isEmpty()
+          ? 1
+          : Math.max(bounds.getSize(new THREE.Vector3()).length(), 1);
+        const cameraLocations = snapshot.live?.camera_locations;
+        if (cameraLocations && Array.isArray(cameraLocations.samples)) {
+          nextOverlay = createCameraOverlay(
+            cameraLocations.samples,
+            transforms,
+            size,
+          );
+          updateCameraOverlay(
+            nextOverlay,
+            initialAligned,
+            initialVisible,
+            showCamerasRef.current,
+          );
+        }
+        if (disposed) {
+          next.forEach(disposeObjectResources);
+          if (nextOverlay) disposeObjectResources(nextOverlay.group);
+          return;
+        }
+        // Add both layers before removing the old pair so a completed batch is
+        // committed in one synchronous scene update. A failed fetch never gets
+        // here, so the previously displayed geometry and overlay stay intact.
+        const previous = objects.current;
+        const previousOverlay = cameraOverlay.current;
+        next.forEach((points) => world.add(points));
+        if (nextOverlay) world.add(nextOverlay.group);
+        objects.current = next;
+        cameraOverlay.current = nextOverlay;
+        previous.forEach((points) => {
+          world.remove(points);
+          disposeObjectResources(points);
+        });
+        if (previousOverlay) {
+          world.remove(previousOverlay.group);
+          disposeObjectResources(previousOverlay.group);
+        }
+        if (nextOverlay)
+          updateCameraOverlay(
+            nextOverlay,
+            initialAligned,
+            initialVisible,
+            showCamerasRef.current,
+          );
+        setCameraReadouts(nextOverlay ? [...nextOverlay.latest.values()] : []);
+        if (cameraSceneKind.current !== Boolean(snapshot.live)) {
+          cameraSceneKind.current = Boolean(snapshot.live);
+          setShowCameras(Boolean(snapshot.live));
+        }
         grid.scale.setScalar(size / 10);
-        grid.position.y = bounds.min.y - 0.01;
+        grid.position.y =
+          (bounds.isEmpty() ? center.y - size / 2 : bounds.min.y) - 0.01;
         reset.current = () => {
           camera.position
             .copy(center)
@@ -281,6 +616,8 @@ export default function Viewer({
         setLoading(false);
       } catch (e) {
         if (!disposed) {
+          next.forEach(disposeObjectResources);
+          if (nextOverlay) disposeObjectResources(nextOverlay.group);
           setError(e instanceof Error ? e.message : 'Could not load scene.');
           setLoading(false);
         }
@@ -292,6 +629,12 @@ export default function Viewer({
       abort.abort();
     };
   }, [scene.id]);
+  useEffect(() => {
+    const live = Boolean(scene.live);
+    if (cameraSceneKind.current === live) return;
+    cameraSceneKind.current = live;
+    setShowCameras(live);
+  }, [scene.id, scene.live]);
   useEffect(() => {
     for (const points of objects.current) {
       const material = points.material as THREE.PointsMaterial;
@@ -306,35 +649,18 @@ export default function Viewer({
       );
       material.needsUpdate = true;
       points.visible = visible[points.userData.source] !== false;
-      points.matrix.identity();
-      if (aligned)
-        points.matrix.set(
-          ...(points.userData.transform.flat() as [
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-          ]),
-        );
+      setTransform(
+        points,
+        aligned ? points.userData.transform : new THREE.Matrix4(),
+      );
       material.size =
         points.userData.spacing *
         pointSize *
         Math.cbrt(Math.abs(points.matrix.determinant()));
-      points.matrixWorldNeedsUpdate = true;
     }
-  }, [aligned, visible, pointSize, colorBySource, loading]);
+    if (cameraOverlay.current)
+      updateCameraOverlay(cameraOverlay.current, aligned, visible, showCameras);
+  }, [aligned, visible, pointSize, colorBySource, loading, showCameras]);
   return (
     <>
       <div
@@ -355,6 +681,22 @@ export default function Viewer({
                 : 'Independent coordinate frames'}
       </div>
       <div className="scene-controls">
+        {(scene.live || cameraReadouts.length > 0) && (
+          <Button
+            variant="outline"
+            aria-pressed={showCameras}
+            aria-label={
+              showCameras ? 'Hide camera locations' : 'Show camera locations'
+            }
+            onClick={() => setShowCameras((current) => !current)}
+            title={
+              showCameras ? 'Hide camera locations' : 'Show camera locations'
+            }
+          >
+            <CameraIcon size={15} />
+            {showCameras ? 'Cameras on' : 'Cameras off'}
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => reset.current()}
@@ -372,6 +714,46 @@ export default function Viewer({
             {error || 'Loading scene geometry…'}
           </p>
         </div>
+      )}
+      {showCameras && cameraReadouts.length > 0 && (
+        <output
+          aria-label="Latest camera locations in arbitrary units"
+          style={{
+            position: 'absolute',
+            top: 68,
+            left: 20,
+            zIndex: 2,
+            maxWidth: 'calc(100% - 40px)',
+            padding: '9px 11px',
+            borderRadius: 6,
+            background: '#152530e8',
+            color: '#d7e5e8',
+            fontSize: 12,
+            lineHeight: 1.55,
+            pointerEvents: 'none',
+          }}
+        >
+          <span style={{ color: '#9eb1bb', marginBottom: 3, display: 'block' }}>
+            Camera locations · arbitrary units
+          </span>
+          {[...cameraReadouts]
+            .filter((sample) => visible[sample.source] !== false)
+            .sort((a, b) => a.source.localeCompare(b.source))
+            .map((sample) => (
+              <span key={sample.source} style={{ display: 'block' }}>
+                <span
+                  style={{
+                    color: `#${sourceColor(sample.source).toString(16).padStart(6, '0')}`,
+                  }}
+                >
+                  Source {sample.source}
+                </span>{' '}
+                x {formatCoordinate(sample.position[0])} · y{' '}
+                {formatCoordinate(sample.position[1])} · z{' '}
+                {formatCoordinate(sample.position[2])}
+              </span>
+            ))}
+        </output>
       )}
       <div className="canvas-footer">
         <span>

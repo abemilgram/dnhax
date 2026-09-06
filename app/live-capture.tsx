@@ -447,7 +447,7 @@ export default function LiveCapture({
       delivered.current = session.scene.id;
       onScene(session.scene);
     }
-  }, [follow, onScene, session?.scene?.id]);
+  }, [follow, onScene, session?.scene]);
   async function action(name: string) {
     setBusy(true);
     setError('');
@@ -598,6 +598,19 @@ export default function LiveCapture({
           {new Date(session.scene.created * 1000).toLocaleTimeString()} ·{' '}
           {session.scene.live.elapsed_seconds.toFixed(1)}s processing ·{' '}
           {session.scene.live.continuity.reason}
+        </p>
+      )}
+      {session?.scene?.live?.camera_locations && (
+        <p className="small">
+          Camera positions update with each completed geometry batch in shared
+          scene coordinates.{' '}
+          <a
+            href={`/api/live/sessions/${session.id}/camera-locations`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open camera location data
+          </a>
         </p>
       )}
       {session?.error && (
