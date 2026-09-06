@@ -137,6 +137,27 @@ class PairRequest(BaseModel):
     capture_b: str
 
 
+@app.post("/api/joint", status_code=202)
+def joint(request: PairRequest):
+    if request.capture_a == request.capture_b:
+        raise HTTPException(422, "Choose two different captures.")
+    with store.connect() as db:
+        for identity, source in [(request.capture_a, "A"), (request.capture_b, "B")]:
+            capture = db.execute("SELECT source FROM captures WHERE id=?", (identity,)).fetchone()
+            if not capture:
+                raise HTTPException(404, f"Source {source} capture not found.")
+            if capture["source"] != source:
+                raise HTTPException(422, f"Choose a source {source} capture.")
+        existing = db.execute(
+            "SELECT id FROM jobs WHERE kind='joint' AND status IN ('queued','running') "
+            "AND json_extract(payload,'$.capture_a')=? AND json_extract(payload,'$.capture_b')=?",
+            (request.capture_a, request.capture_b),
+        ).fetchone()
+    if existing:
+        return {"job_id": existing["id"]}
+    return {"job_id": store.enqueue("joint", request.model_dump())}
+
+
 @app.post("/api/pair", status_code=202)
 def pair(request: PairRequest):
     for identity in [request.capture_a, request.capture_b]:

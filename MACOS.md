@@ -63,8 +63,14 @@ The generated certificate, private key, and public phone certificate stay under 
 
 ## Implementation and validation limits
 
-`backend/runtime.py` selects the device, releases device-specific caches, and dispatches inference. CUDA uses upstream `forward` unchanged. MPS/CPU directly call the same aggregator and camera/depth heads without upstream's hard-coded CUDA autocast contexts. The model and inputs stay float32; no upstream files or global Torch functions are modified. The optional text-alignment head is not used by this application.
+`backend/runtime.py` selects the device, releases device-specific caches, and dispatches inference. CUDA uses upstream `forward` unchanged. MPS/CPU directly call the same aggregator and camera/depth heads without upstream's hard-coded CUDA autocast contexts. The model and inputs stay float32; no upstream files or global Torch functions are modified. The optional point and tracking heads are disabled.
 
 The MPS device check and real checkpoint inference must pass on the target Mac before treating the setup as ready. Reconstruction accuracy, memory consumption, and latency still depend on the capture and selected frame count. `VALIDATION.md` records the checks performed for this branch.
 
 Existing cached reconstructions are reused; submit a new capture when comparing devices or frame settings. `compute_device`, `frame_count`, and precision are stored on new reconstruction records.
+
+### Joint A+B on the Apple GPU
+
+Upload both videos, then click **Reconstruct A + B together** under Sources. Each new joint job samples candidates across both full clips, chooses shared-looking anchor frames and temporally distributed sharp frames, and runs one VGGT sequence. Default: four frames per source, eight total. The two source clouds retain the resulting shared coordinate system; no RANSAC transform is applied by this path.
+
+Set `SIMV1_JOINT_FRAMES_PER_SOURCE=2` before restarting the worker for a smaller four-frame-total run. The allowed range is 2–8 per source; the single-capture `SIMV1_MAX_FRAMES` limit does not affect joint jobs. Joint jobs always create a new scene, so retries with changed settings do not reuse old single-capture geometry. Results remain labeled as unverified predictions: recognizable overlap is required for a reliable reconstruction.

@@ -12,9 +12,11 @@ export function isCombinedScene(scene) {
 export function sceneLabel(scene) {
   return scene.sample
     ? 'Sample A + B'
-    : isCombinedScene(scene)
-      ? 'Combined A + B'
-      : scene.title;
+    : scene.reconstruction?.method === 'joint_vggt'
+      ? 'Joint A + B'
+      : isCombinedScene(scene)
+        ? 'Combined A + B'
+        : scene.title;
 }
 
 /**

@@ -111,6 +111,24 @@ def process(job):
             "provenance": "VGGT-1B independent video reconstruction",
         }
         store.publish(scene)
+    elif kind == "joint":
+        from .joint import reconstruct_joint
+
+        with store.connect() as db:
+            captures = [dict(db.execute("SELECT * FROM captures WHERE id=?", (payload[key],)).fetchone())
+                        for key in ("capture_a", "capture_b")]
+        scene_id = store.uid()
+        clouds, reconstruction = reconstruct_joint(
+            captures, store.ROOT / "scenes" / scene_id,
+            lambda stage: store.update(identity, stage),
+        )
+        store.publish({
+            "id": scene_id, "created": time.time(), "sample": False,
+            "title": "Joint A + B", "clouds": clouds, "diagnostics": None,
+            "reconstruction": reconstruction,
+            "scale_source": "None — arbitrary reconstruction units",
+            "provenance": "A and B reconstructed together by VGGT in one shared coordinate system. Alignment quality is unverified.",
+        })
     elif kind == "pair":
         store.update(
             identity, "Combining independent reconstructions for landmark alignment"

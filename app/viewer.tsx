@@ -315,7 +315,9 @@ export default function Viewer({
           ? `Pick a point in source ${pickSource}`
           : aligned
             ? 'Registered scene'
-            : 'Independent coordinate frames'}
+            : scene.reconstruction?.method === 'joint_vggt'
+              ? 'Joint reconstruction · shared coordinates'
+              : 'Independent coordinate frames'}
       </div>
       <div className="scene-controls">
         <Button

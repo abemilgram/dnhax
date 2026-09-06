@@ -119,6 +119,7 @@ export default function Home() {
     (s) => !s.sample && isCombinedScene(s),
   );
   const diagnostics = scene?.diagnostics;
+  const jointReconstruction = scene?.reconstruction?.method === 'joint_vggt';
   const active = state.jobs.some((j) =>
     ['queued', 'running'].includes(j.status),
   );
@@ -287,12 +288,30 @@ export default function Home() {
           </div>
           <div className="sample-bar">
             <div>
-              <strong>Ready to compare both reconstructions?</strong>
+              <strong>Reconstruct both videos as one room</strong>
               <p>
-                Create a scene from the latest completed A and B captures, then
-                supply matching landmarks.
+                Select keyframes across A and B and reconstruct them together.
+                Both videos must show some of the same distinctive objects or
+                surfaces. Separate reconstruction is not required.
               </p>
             </div>
+            <Button
+              variant="outline"
+              disabled={!a || !b || busy || active}
+              onClick={() => {
+                void act('joint', { capture_a: a?.id, capture_b: b?.id });
+                setView('alignment');
+              }}
+            >
+              <Link2 /> Reconstruct A + B together
+            </Button>
+          </div>
+          <details className="landmarks">
+            <summary>Compare existing independent reconstructions</summary>
+            <p className="small">
+              Display the two separately reconstructed clouds for manual
+              landmark alignment.
+            </p>
             <Button
               variant="outline"
               disabled={!a || !b || busy || active}
@@ -301,9 +320,9 @@ export default function Home() {
                 setView('alignment');
               }}
             >
-              <Link2 /> Combine A + B
+              Combine existing A + B
             </Button>
-          </div>
+          </details>
         </TabsContent>
         {['alignment', 'explore'].map((tab) => (
           <TabsContent key={tab} value={tab}>
@@ -351,6 +370,15 @@ export default function Home() {
                   </span>
                 )}
                 {scene && <p className="small">{scene.provenance}</p>}
+                {scene?.reconstruction && (
+                  <p className="small">
+                    {scene.reconstruction.frames_per_source[0]} frames from A +{' '}
+                    {scene.reconstruction.frames_per_source[1]} from B ·{' '}
+                    {scene.reconstruction.elapsed_seconds.toFixed(1)} seconds
+                    <br />
+                    {scene.reconstruction.quality_note}
+                  </p>
+                )}
                 {combinedScene && !isCombinedScene(scene) && (
                   <Button
                     variant="outline"
@@ -389,10 +417,12 @@ export default function Home() {
                   </Select>
                 )}
                 <label className="toggle-row" htmlFor={`alignment-${tab}`}>
-                  Apply alignment
+                  {jointReconstruction
+                    ? 'Apply landmark correction'
+                    : 'Apply alignment'}
                   <Switch
                     id={`alignment-${tab}`}
-                    checked={aligned}
+                    checked={aligned && !!diagnostics}
                     onCheckedChange={setAligned}
                     disabled={!diagnostics}
                   />
@@ -445,6 +475,8 @@ export default function Home() {
                           </>
                         ) : diagnostics ? (
                           'Provisional'
+                        ) : jointReconstruction ? (
+                          'Joint VGGT prediction'
                         ) : (
                           'Awaiting landmarks'
                         )}
@@ -482,7 +514,11 @@ export default function Home() {
                     )}
                     {scene && scene.clouds.length === 2 && (
                       <details className="landmarks">
-                        <summary>Landmark alignment</summary>
+                        <summary>
+                          {jointReconstruction
+                            ? 'Optional landmark correction'
+                            : 'Landmark alignment'}
+                        </summary>
                         <p className="small">
                           Pick the same physical points in A then B. Use at
                           least 8 pairs across the scene. Coordinates always

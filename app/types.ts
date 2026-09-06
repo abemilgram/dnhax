@@ -38,6 +38,16 @@ export type Scene = {
   diagnostics: Diagnostics | null;
   scale_source: string;
   provenance: string;
+  reconstruction?: {
+    method: 'joint_vggt';
+    frames_per_source: number[];
+    anchor_times: number[];
+    anchor_reciprocal_matches: number;
+    overlap_verified: boolean;
+    quality_note: string;
+    elapsed_seconds: number;
+    compute_device: string;
+  };
   landmarks?: { source_points: number[][]; target_points: number[][] };
 };
 export type State = {

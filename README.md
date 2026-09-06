@@ -79,7 +79,7 @@ PowerShell launch example:
 .\.venv\Scripts\python.exe scripts\serve.py
 ```
 
-The adapter extracts a bounded number of frames at 1 fps (defaults: CUDA 24, MPS 8, CPU 2) (the beginning of the submitted clip), independently processes each capture, confidence-filters its geometry, and exports at most 1,000,000 displayed points per source. Depth, confidence, and predicted camera matrices are preserved under the reconstruction directory. This is a fixed sampling baseline, not intelligent keyframe selection. Video timestamps are approximate frame-sampling timestamps.
+Single-capture reconstruction extracts a bounded number of frames at 1 fps (defaults: CUDA 24, MPS 8, CPU 2) from the beginning of the submitted clip. Joint A+B reconstruction selects frames across both full clips as described below. Both paths confidence-filter geometry and export at most 1,000,000 displayed points per source. Depth, confidence, and predicted camera matrices are preserved alongside the clouds. Video timestamps are approximate frame-sampling timestamps.
 
 The adapter follows the official model API. Memory use, geometry quality, and latency depend on the selected device and clip. A missing model, missing checkpoint, explicitly requested unavailable device, or failed decode produces an explicit failed job and never a sample reconstruction. The app does not promise live processing performance.
 
@@ -88,14 +88,22 @@ The adapter follows the official model API. Memory use, geometry quality, and la
 1. Open the app and click **Load sample**. Wait for the worker; a synthetic room appears.
 2. In **Alignment**, toggle Apply alignment to inspect independent frames versus registered geometry. Diagnostics are computed from the fixture's known correspondence pairs, not measured video performance.
 3. In **Explore**, isolate each source, change point size, and download original PLYs and the scene manifest.
-4. For real captures, submit one room clip to A and one to B. Click **Reconstruct capture** for each and wait for both jobs to complete.
-5. Click **Combine A + B**. This publishes the two independent maps without claiming alignment.
-6. Under **Landmark alignment**, click **Pick pairs**. Select the same physical landmark first in A, then B; repeat for at least 8 well-distributed pairs. Toggle source visibility if useful. Clicking stores original cloud coordinates, even if previously transformed.
-7. Adjust the inlier threshold in A's reconstruction units and click **Fit and validate**. A new immutable scene version is published. Alternatively paste JSON with `source_points` (B) and `target_points` (A), arrays of matching `[x,y,z]` coordinates.
+4. For real captures, submit one room clip to A and one to B. Both clips need recognizable shared content.
+5. Click **Reconstruct A + B together**. VGGT processes keyframes from both videos in one sequence and exports a **Joint A + B** scene with separate source labels in shared coordinates. You do not need to reconstruct the captures separately first.
+6. In **Explore**, toggle A/B or enable source colors to inspect overlap. Joint predictions are not independently validated alignment measurements. If shared features are scarce, the scene displays a warning.
+7. For an optional manual correction, open **Optional landmark correction**, click **Pick pairs**, and select the same landmark in A then B for at least eight distributed pairs. Click **Fit and validate** to publish a new version. The manual correction remains a separate RANSAC similarity fit; the joint pipeline does not use RANSAC.
+
+To compare the previous independent pipeline, use **Reconstruct capture** on each video, then **Compare existing independent reconstructions → Combine existing A + B**. That path only places the clouds together until you supply landmark pairs.
 
 Registration uses a deterministic train/held-out split. At least two pairs are held out. The heuristic accepted status requires >=60% training inliers and median held-out residual below the chosen threshold. Inspect the geometry: a low error on a small shared patch is not proof of global accuracy. A global similarity transform cannot remove internal reconstruction distortion. No absolute meters are claimed.
 
-The viewer opens the latest real **Combined A + B** scene when one is available. Later single-capture results do not replace a selected combined scene. The scene menu identifies **Capture A**, **Capture B**, and **Combined A + B** separately. Each source switch shows its point count; an absent source is labeled **Not in this scene** and cannot be toggled. Scene changes show all included sources, and **Displayed points** counts only sources currently enabled.
+The viewer opens the latest real two-source scene when one is available. Later single-capture results do not replace a selected combined scene. The scene menu distinguishes **Joint A + B**, **Combined A + B**, and single captures. Each source switch shows its point count; an absent source is labeled **Not in this scene** and cannot be toggled. Scene changes show all included sources, and **Displayed points** counts only sources currently enabled.
+
+### Joint keyframe selection and limits
+
+`SIMV1_JOINT_FRAMES_PER_SOURCE` defaults to **4** (8 frames total) and permits 2–8 per source. This is independent of `SIMV1_MAX_FRAMES`, which controls single-capture jobs. The selector samples at least twelve candidates across each full clip, chooses an A/B anchor pair using reciprocal SIFT descriptor matches, then selects additional frames using temporal spread and sharpness. The match count is an appearance cue, not a geometric overlap certificate. No extra model weights are needed.
+
+All selected A/B images enter one VGGT sequence. Splitting the output by source preserves the predicted shared coordinates without recentering or fitting a transform. New jobs write new scene artifacts; existing independent reconstructions remain unchanged. Joint manifests include selected camera frames/timestamps, source IDs, device, elapsed time, and an explicit unverified-quality note. Disjoint views, repeated textures, blur, or inconsistent depth can still produce poor geometry; the app does not claim an accepted registration merely because inference completes.
 
 ## Layout and containers
 
@@ -105,6 +113,7 @@ components/ui/        Starter UI primitives
 backend/api.py        Uploads, jobs, state, artifact serving
 backend/worker.py     Single worker, sample generation, job execution
 backend/reconstruct.py Optional batch VGGT CUDA/MPS adapter
+backend/joint.py      Joint A+B keyframe selection and reconstruction
 backend/geometry.py   Similarity fitting, RANSAC, PLY output
 backend/store.py      SQLite metadata and immutable publication
 scripts/serve.py      Local LAN launcher and process cleanup
