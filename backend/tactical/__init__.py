@@ -5,9 +5,20 @@ fire, target-selection, or control outputs.
 """
 
 from .cues import CueConfig, CueReducer
+from .detector import Detector, PixelDetection, TimestampedFrame
 from .map import TacticalMap, load_map
 from .navgraph import IntentDefinition, NavGraph, NavNode
 from .planner import PlannerConfig, TacticalPlanner, plan_trajectories
+from .projection import (
+    CameraIntrinsics,
+    CameraPose,
+    FixedAerialProjector,
+    FixedPoseProvider,
+    HomographyCalibration,
+    PoseProvider,
+    RayGroundCalibration,
+    RayGroundProjector,
+)
 from .scoring import (
     evaluate_route,
     has_line_of_sight,
@@ -31,13 +42,21 @@ from .schema import (
     TrajectoryCandidate,
 )
 from .tracker import TacticalTracker, TrackerConfig
+from .tape import FeedState, ReplayIndex, TacticalTape, load_tape
 
 __all__ = [
     "ActorState",
+    "CameraIntrinsics",
+    "CameraPose",
     "Cue",
     "CueConfig",
     "CueReducer",
+    "Detector",
     "EvidenceState",
+    "FeedState",
+    "FixedAerialProjector",
+    "FixedPoseProvider",
+    "HomographyCalibration",
     "IntentDefinition",
     "IntentKind",
     "LifecycleState",
@@ -46,13 +65,20 @@ __all__ = [
     "Observation",
     "PlanRanking",
     "PlannerConfig",
+    "PixelDetection",
+    "PoseProvider",
+    "RayGroundCalibration",
+    "RayGroundProjector",
+    "ReplayIndex",
     "RiskBand",
     "ScoreComponents",
     "SensorSpec",
     "TacticalMap",
+    "TacticalTape",
     "TacticalPlanner",
     "TacticalTracker",
     "TimedPoint",
+    "TimestampedFrame",
     "TrackerConfig",
     "TrackSnapshot",
     "TrajectoryCandidate",
@@ -60,6 +86,7 @@ __all__ = [
     "has_line_of_sight",
     "interpolate_polyline",
     "load_map",
+    "load_tape",
     "plan_trajectories",
     "polyline_length",
     "turn_cost",

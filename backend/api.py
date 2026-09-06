@@ -221,8 +221,10 @@ def artifact(relative: str):
 
 
 from .live_api import router as live_router
+from .tactical.api import router as tactical_router
 
 app.include_router(live_router)
+app.include_router(tactical_router)
 
 # Production export: one origin serves interface and API on port 8000.
 web = Path(__file__).resolve().parents[1] / "dist" / "client"

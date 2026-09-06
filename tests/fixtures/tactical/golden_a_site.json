@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "golden-a-site-v1",
+  "duration": 6.0,
+  "sensors": [
+    {
+      "sensor_id": "aerial-fixed",
+      "xyz": [0.0, 3.0, -10.0],
+      "forward_xz": [0.0, 1.0],
+      "horizontal_fov_degrees": 120.0,
+      "max_range": 50.0
+    }
+  ],
+  "initial": {
+    "actor": {"xyz": [0.0, 0.0, -6.0], "velocity_xz": [0.0, 0.0]},
+    "feeds": {"aerial-fixed": "online"}
+  },
+  "events": [
+    {"type": "actor", "t": 0.0, "xyz": [0.0, 0.0, -6.0], "velocity_xz": [0.0, 0.0]},
+    {"type": "observation", "t": 0.0, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 0, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.1, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 1, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.2, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 2, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.3, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 3, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.4, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 4, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.5, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 5, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.6, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 6, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.7, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 7, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.8, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 8, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 0.9, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 9, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "feed", "t": 1.0, "sensor_id": "aerial-fixed", "state": "occluded"},
+    {"type": "feed", "t": 3.5, "sensor_id": "aerial-fixed", "state": "online"},
+    {"type": "observation", "t": 3.5, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 35, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 3.6, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 36, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 3.7, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 37, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 3.8, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 38, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 3.9, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 39, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.0, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 40, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.1, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 41, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.2, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 42, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.3, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 43, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.4, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 44, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.5, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 45, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.6, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 46, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.7, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 47, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.8, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 48, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 4.9, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 49, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.0, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 50, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.1, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 51, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.2, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 52, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.3, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 53, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.4, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 54, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.5, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 55, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.6, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 56, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.7, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 57, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.8, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 58, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 5.9, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 59, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]},
+    {"type": "observation", "t": 6.0, "sensor_id": "aerial-fixed", "xyz": [-10.0, 1.0, 4.0], "conf": 0.96, "sequence": 60, "covariance": [[0.04, 0.0, 0.0], [0.0, 0.04, 0.0], [0.0, 0.0, 0.04]]}
+  ]
+}

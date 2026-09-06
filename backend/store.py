@@ -31,6 +31,9 @@ def connect():
     from .live_schema import migrate
 
     migrate(db)
+    from .tactical.migrations import migrate as migrate_tactical
+
+    migrate_tactical(db)
     try:
         with db:
             yield db
@@ -161,6 +164,8 @@ def delete_capture(identity):
 def reset_workspace():
     """Clear iteration data while retaining the database, lock, and model volume."""
     with connect() as db:
+        db.execute("DELETE FROM tactical_cues")
+        db.execute("DELETE FROM tactical_sessions")
         db.execute("DELETE FROM live_pins")
         db.execute("DELETE FROM live_batches")
         db.execute("DELETE FROM live_frames")

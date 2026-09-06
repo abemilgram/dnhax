@@ -108,12 +108,24 @@ class TacticalTracker:
         )
         self._next_track_id += 1
 
-    def _expected_visible(self, track: TrackState) -> bool:
+    def _expected_visible(
+        self,
+        track: TrackState,
+        visible_sensor_ids: frozenset[str],
+    ) -> bool:
         point = (float(track.state[0]), track.y, float(track.state[1]))
-        return any(self.map.is_visible(sensor, point) for sensor in self.sensors.values())
+        return any(
+            self.map.is_visible(sensor, point)
+            for sensor_id, sensor in self.sensors.items()
+            if sensor_id in visible_sensor_ids
+        )
 
     def step(
-        self, t: float, observations: Iterable[Observation] = ()
+        self,
+        t: float,
+        observations: Iterable[Observation] = (),
+        *,
+        visible_sensor_ids: Iterable[str] | None = None,
     ) -> tuple[TrackSnapshot, ...]:
         """Advance to ``t``, ingest observations, and return stable snapshots."""
 
@@ -127,6 +139,16 @@ class TacticalTracker:
             key=lambda item: (item.sensor_id, item.sequence, item.xyz),
         )
         seen_sequences: set[tuple[str, int]] = set()
+        visible = (
+            frozenset(self.sensors)
+            if visible_sensor_ids is None
+            else frozenset(visible_sensor_ids)
+        )
+        unknown_visible = visible.difference(self.sensors)
+        if unknown_visible:
+            raise ValueError(
+                f"unknown visible sensor_id {sorted(unknown_visible)[0]!r}"
+            )
         for observation in ordered:
             if observation.t != t:
                 raise ValueError("all observation timestamps must equal step time")
@@ -182,7 +204,7 @@ class TacticalTracker:
             else:
                 track.evidence = EvidenceState.STALE
                 track.misses += 1
-                if self._expected_visible(track):
+                if self._expected_visible(track, visible):
                     track.expected_visible_misses += 1
 
         for observation_index in result.unassigned_observations:
