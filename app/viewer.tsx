@@ -335,9 +335,19 @@ export default function Viewer({
       )}
       <div className="canvas-footer">
         <span>
-          <i className="dot" />
-          Source A <i className="dot b" style={{ marginLeft: 15 }} />
-          Source B
+          {scene.clouds.map((cloud, index) => (
+            <span
+              key={cloud.source}
+              style={{
+                marginLeft: index ? 15 : 0,
+                opacity: visible[cloud.source] === false ? 0.45 : 1,
+              }}
+            >
+              <i className={`dot ${cloud.source === 'B' ? 'b' : ''}`} />
+              Source {cloud.source}
+              {visible[cloud.source] === false ? ' (hidden)' : ''}
+            </span>
+          ))}
         </span>
         <span>Drag to orbit · scroll to zoom</span>
       </div>

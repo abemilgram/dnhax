@@ -21,3 +21,9 @@ Not verified here: NVIDIA CUDA inference, model checkpoint loading, real-video r
 - The compute checker passed a matrix operation on Apple MPS and found both the installed package and checkpoint.
 - Full checkpoint inference completed on an Apple M4 Pro GPU for two independent submitted clips at two 518px frames each. The exports contain 415,881 and 401,209 filtered colored points, camera predictions, depth, confidence, and `compute_device: mps` provenance.
 - These checks establish that the integration executes on this Mac. They do not establish reconstruction accuracy or performance across other captures, frame counts, or Apple Silicon models.
+
+## Combined-scene visibility
+
+- Both saved clouds were fetched through the running trusted HTTPS API and checked: A contains 415,881 finite, non-zero points; B contains 401,209. Color buffer lengths match both manifests.
+- Six Node regression tests pass for default combined-scene selection, preservation after a later single reconstruction, explicit single-scene selection, newly combined/registered results, missing selections, and distinct labels.
+- TypeScript, lint, and production build pass. The running HTTPS app serves the rebuilt viewer and all seven directly referenced JS/CSS assets. The default-scene helper selects both real clouds using the current API state.

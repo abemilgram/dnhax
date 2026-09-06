@@ -95,6 +95,8 @@ The adapter follows the official model API. Memory use, geometry quality, and la
 
 Registration uses a deterministic train/held-out split. At least two pairs are held out. The heuristic accepted status requires >=60% training inliers and median held-out residual below the chosen threshold. Inspect the geometry: a low error on a small shared patch is not proof of global accuracy. A global similarity transform cannot remove internal reconstruction distortion. No absolute meters are claimed.
 
+The viewer opens the latest real **Combined A + B** scene when one is available. Later single-capture results do not replace a selected combined scene. The scene menu identifies **Capture A**, **Capture B**, and **Combined A + B** separately. Each source switch shows its point count; an absent source is labeled **Not in this scene** and cannot be toggled. Scene changes show all included sources, and **Displayed points** counts only sources currently enabled.
+
 ## Layout and containers
 
 ```text
@@ -130,6 +132,7 @@ Vite runs at port 5173 and proxies `/api` to 8000. Use the built launcher for th
 
 ```sh
 python -m pytest -q
+node --test tests/scene-selection.test.mjs
 npm run typecheck
 npm run build
 ```

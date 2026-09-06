@@ -23,6 +23,11 @@ import {
 import Viewer from './viewer';
 import Capture from './capture';
 import FrameInspector from './frame-inspector';
+import {
+  isCombinedScene,
+  nextSceneId,
+  sceneLabel,
+} from './scene-selection.mjs';
 import type { State } from './types';
 const empty: State = {
   captures: [],
@@ -85,10 +90,11 @@ export default function Home() {
     const data = (await request('state')) as State;
     setState(data);
     setConnected(true);
-    if (data.scenes[0] && latest.current !== data.scenes[0].id) {
-      latest.current = data.scenes[0].id;
-      setSceneId(data.scenes[0].id);
-    }
+    const previousLatestId = latest.current;
+    latest.current = data.scenes[0]?.id || '';
+    setSceneId((current) =>
+      nextSceneId(data.scenes, current, previousLatestId),
+    );
     return data;
   }, []);
   useEffect(() => {
@@ -109,11 +115,15 @@ export default function Home() {
     };
   }, [refresh]);
   const scene = state.scenes.find((s) => s.id === sceneId) || state.scenes[0];
+  const combinedScene = state.scenes.find(
+    (s) => !s.sample && isCombinedScene(s),
+  );
   const diagnostics = scene?.diagnostics;
   const active = state.jobs.some((j) =>
     ['queued', 'running'].includes(j.status),
   );
   useEffect(() => {
+    setVisible({ A: true, B: true });
     setPickSource(undefined);
     pendingTarget.current = null;
     setPairs({ source_points: [], target_points: [] });
@@ -333,7 +343,7 @@ export default function Home() {
                     : 'SCENE EXPLORER'}
                 </p>
                 <div className="project-info">
-                  <h2>{scene ? scene.title : 'No scene yet'}</h2>
+                  <h2>{scene ? sceneLabel(scene) : 'No scene yet'}</h2>
                 </div>
                 {scene?.sample && (
                   <span className="badge sample">
@@ -341,6 +351,18 @@ export default function Home() {
                   </span>
                 )}
                 {scene && <p className="small">{scene.provenance}</p>}
+                {combinedScene && !isCombinedScene(scene) && (
+                  <Button
+                    variant="outline"
+                    style={{ marginTop: 12 }}
+                    onClick={() => {
+                      setSceneId(combinedScene.id);
+                      setVisible({ A: true, B: true });
+                    }}
+                  >
+                    <Layers3 /> View combined A + B
+                  </Button>
+                )}
                 {state.scenes.length > 0 && (
                   <Select
                     value={scene?.id}
@@ -348,13 +370,18 @@ export default function Home() {
                       if (v) setSceneId(v);
                     }}
                   >
-                    <SelectTrigger style={{ width: '100%', marginTop: 18 }}>
-                      <SelectValue />
+                    <SelectTrigger
+                      aria-label="Scene"
+                      style={{ width: '100%', marginTop: 18 }}
+                    >
+                      <SelectValue>
+                        {scene ? sceneLabel(scene) : 'Choose scene'}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {state.scenes.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
-                          {s.sample ? 'Sample' : 'Capture'} ·{' '}
+                          {sceneLabel(s)} ·{' '}
                           {new Date(s.created * 1000).toLocaleTimeString()}
                         </SelectItem>
                       ))}
@@ -370,20 +397,35 @@ export default function Home() {
                     disabled={!diagnostics}
                   />
                 </label>
-                {['A', 'B'].map((source) => (
-                  <label className="toggle-row" key={source}>
-                    <span>
-                      <i className={`dot ${source === 'B' ? 'b' : ''}`} />
-                      Source {source}
-                    </span>
-                    <Switch
-                      checked={visible[source]}
-                      onCheckedChange={(v) =>
-                        setVisible({ ...visible, [source]: v })
-                      }
-                    />
-                  </label>
-                ))}
+                {['A', 'B'].map((source) => {
+                  const cloud = scene?.clouds.find((c) => c.source === source);
+                  return (
+                    <label
+                      className="toggle-row"
+                      key={source}
+                      htmlFor={`source-${source}-${tab}`}
+                    >
+                      <span>
+                        <i className={`dot ${source === 'B' ? 'b' : ''}`} />
+                        Source {source}
+                        <span className="small" style={{ display: 'block' }}>
+                          {cloud
+                            ? `${cloud.count.toLocaleString()} points`
+                            : 'Not in this scene'}
+                        </span>
+                      </span>
+                      <Switch
+                        id={`source-${source}-${tab}`}
+                        aria-label={`Show source ${source}`}
+                        disabled={!cloud}
+                        checked={!!cloud && visible[source]}
+                        onCheckedChange={(v) =>
+                          setVisible((current) => ({ ...current, [source]: v }))
+                        }
+                      />
+                    </label>
+                  );
+                })}
                 {tab === 'alignment' ? (
                   <>
                     <div className="metric">
@@ -545,7 +587,11 @@ export default function Home() {
                       <span>Displayed points</span>
                       <strong>
                         {scene?.clouds
-                          .reduce((total, c) => total + c.count, 0)
+                          .reduce(
+                            (total, c) =>
+                              total + (visible[c.source] ? c.count : 0),
+                            0,
+                          )
                           .toLocaleString() || '—'}
                       </strong>
                     </div>
