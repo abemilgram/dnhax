@@ -252,7 +252,8 @@ def test_openness_is_independent_of_observers_and_covered_routes_are_lower():
     covered_score = evaluate_route(planner_map(covered=True), route, [])
     assert open_score.los_fraction == 0.0
     assert open_score.open_fraction == 1.0
-    assert open_score.time_in_open > 0.0
+    assert open_score.time_in_open == pytest.approx(9.0)
+    assert covered_score.time_in_open == pytest.approx(1.8)
     assert covered_score.open_fraction < open_score.open_fraction
 
 

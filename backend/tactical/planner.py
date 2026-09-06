@@ -274,7 +274,7 @@ class TacticalPlanner:
             observer_positions,
             reliabilities,
             uncertainties,
-            dt=self.config.step,
+            time_deltas=np.full(steps - 1, self.config.step, dtype=np.float64),
             route_length=route_length,
             route_turn_cost=turn_cost(route_points),
             reach_probability=float(np.mean(reached)),

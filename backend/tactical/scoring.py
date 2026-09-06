@@ -108,7 +108,6 @@ def evaluate_route(
         uncertainty[index] = math.sqrt(
             max(0.0, float(covariance[0, 0] + covariance[1, 1]))
         )
-    dt = float(np.median(np.diff(times))) if len(times) > 1 else 0.0
     points = tuple(point.xyz for point in route)
     return score_rollouts(
         tactical_map,
@@ -116,7 +115,7 @@ def evaluate_route(
         observer_positions,
         reliabilities,
         uncertainty,
-        dt=max(0.0, dt),
+        time_deltas=np.diff(times),
         route_length=polyline_length(points),
         route_turn_cost=turn_cost(points),
         reach_probability=1.0,
@@ -132,7 +131,7 @@ def score_rollouts(
     observer_reliabilities: np.ndarray,
     observer_uncertainties: np.ndarray,
     *,
-    dt: float,
+    time_deltas: np.ndarray,
     route_length: float,
     route_turn_cost: float,
     reach_probability: float,
@@ -150,6 +149,15 @@ def score_rollouts(
             "observer_positions must have shape (rollouts, observers, steps, 3)"
         )
     rollout_count, step_count, _ = actors.shape
+    deltas = np.asarray(time_deltas, dtype=np.float64)
+    if (
+        deltas.shape != (max(0, step_count - 1),)
+        or not np.isfinite(deltas).all()
+        or np.any(deltas < 0.0)
+    ):
+        raise ValueError(
+            "time_deltas must be finite non-negative intervals between steps"
+        )
     los_values = np.zeros((rollout_count, step_count), dtype=np.float64)
     exposure_values = np.zeros_like(los_values)
     openness_values = np.zeros_like(los_values)
@@ -178,8 +186,18 @@ def score_rollouts(
     los_fraction = float(los_values.mean())
     exposure_fraction = float(exposure_values.mean())
     open_fraction = float(openness_values.mean())
-    time_in_open = float(
-        openness_values.sum(axis=1).mean() * max(0.0, dt)
+    time_in_open = (
+        float(
+            (
+                0.5
+                * (openness_values[:, :-1] + openness_values[:, 1:])
+                * deltas[None, :]
+            )
+            .sum(axis=1)
+            .mean()
+        )
+        if step_count > 1
+        else 0.0
     )
     tail_count = max(1, math.ceil(rollout_count * 0.1))
     exposure_cvar90 = float(np.sort(rollout_exposure)[-tail_count:].mean())

@@ -50,9 +50,9 @@ class PixelDetection:
     x_max: float
     y_max: float
     confidence: float
+    detection_index: int
     class_id: str = "entity"
     covariance_px: tuple[tuple[float, float], tuple[float, float]] | None = None
-    detection_index: int = 0
 
     def __post_init__(self) -> None:
         for name in ("x_min", "y_min", "x_max", "y_max"):

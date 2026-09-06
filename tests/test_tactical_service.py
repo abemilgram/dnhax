@@ -155,6 +155,25 @@ def test_service_recreation_seeds_revision_and_refreshes_stale_cursor():
     )
 
 
+def test_clock_driven_playback_persists_latest_published_revision():
+    clock = Clock()
+    persistence = MemoryPersistence()
+    service = TacticalService.from_path(
+        clock=clock,
+        persistence=persistence,
+        session_id="playing-session",
+    )
+    service.start()
+    clock.value += 1.2
+    published = service.current()
+    recreated = TacticalService.from_path(
+        clock=clock,
+        persistence=persistence,
+        session_id="playing-session",
+    )
+    assert recreated.current()["revision"] > published["revision"]
+
+
 def test_malformed_tapes_and_replay_input_are_rejected(tmp_path):
     data = json.loads(Path(DEFAULT_TAPE_PATH).read_text())
     malformed = tmp_path / "malformed.json"
@@ -184,6 +203,7 @@ def test_homography_projects_bottom_center_and_propagates_uncertainty():
         110,
         120,
         0.8,
+        0,
         covariance_px=((4.0, 0.0), (0.0, 9.0)),
     )
     projector = FixedAerialProjector(
@@ -237,9 +257,14 @@ def test_two_detections_in_one_frame_have_unique_tracker_sequences():
     assert len(tracker.step(frame.t, observations)) == 2
 
 
+def test_detection_index_is_required_at_detector_boundary():
+    with pytest.raises(TypeError):
+        PixelDetection(90, 80, 110, 100, 1.0)
+
+
 def test_ray_projection_accuracy_and_invalid_calibration_rejection():
     frame = TimestampedFrame("moving-future", 2.0, 3, 200, 200, b"pixels")
-    detection = PixelDetection(90, 80, 110, 100, 1.0)
+    detection = PixelDetection(90, 80, 110, 100, 1.0, 0)
     downward = CameraPose(
         rotation=((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)),
         xyz=(0.0, 10.0, 0.0),

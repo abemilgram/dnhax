@@ -299,6 +299,10 @@ class TacticalService:
             for tick in range(self._position_tick + 1, destination + 1):
                 self._process_tick(tick)
             self._publish_snapshot()
+            # A reconnecting browser may already hold any published revision.
+            # Persist that cursor before returning it so process restarts cannot
+            # move the stream backwards.
+            self._persist_session()
         if destination >= self.tape.final_tick:
             self._playing = False
             self._revision += 1
