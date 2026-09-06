@@ -42,6 +42,7 @@ export interface TacticalZone {
   id: string;
   min: Vec3;
   max: Vec3;
+  openness: number;
 }
 
 export interface TacticalMap {
@@ -67,6 +68,7 @@ export interface FeedSnapshot {
 export interface TrackSnapshot {
   track_id: number;
   t: number;
+  last_observed_t: number;
   xyz: Vec3;
   velocity_xz: Vec2;
   covariance: Matrix4;

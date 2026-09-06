@@ -7,20 +7,14 @@ import { useTacticalStream } from './use-tactical-stream';
 import {
   covarianceEllipse95,
   rankedIntentLabel,
+  riskBandForScore,
   riskBandLabel,
 } from './state.mjs';
 import type {
-  RiskBand,
   TacticalCue,
   TacticalSnapshot,
   TrajectoryCandidate,
 } from './types';
-
-function riskBand(risk: number): RiskBand {
-  if (risk < 0.34) return 'low';
-  if (risk < 0.67) return 'medium';
-  return 'high';
-}
 
 function formatClock(value: number) {
   return `${value.toFixed(1).padStart(4, '0')}s`;
@@ -99,7 +93,7 @@ function FutureCard({
   candidate: TrajectoryCandidate;
   rank: number;
 }) {
-  const band = riskBand(candidate.score.risk_score);
+  const band = riskBandForScore(candidate.score.risk_score);
   return (
     <article className={`future-card rank-${rank}`}>
       <div className="future-card-heading">

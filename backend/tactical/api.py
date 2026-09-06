@@ -17,6 +17,12 @@ router = APIRouter(prefix="/api/tactical", tags=["tactical"])
 _services: dict[str, TacticalService] = {}
 
 
+def invalidate_service(workspace_root: object) -> None:
+    """Drop cached transport state after its workspace is reset."""
+
+    _services.pop(str(workspace_root), None)
+
+
 def _service() -> TacticalService:
     """Keep one hot replay per monkeypatchable workspace root."""
 

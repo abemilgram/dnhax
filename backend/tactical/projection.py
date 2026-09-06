@@ -36,6 +36,13 @@ def _pixel_covariance(detection: PixelDetection) -> np.ndarray:
     return np.eye(2, dtype=np.float64) * variance
 
 
+def _detection_sequence(frame_sequence: int, detection_index: int) -> int:
+    """Cantor-pair frame and detection indices into a unique nonnegative id."""
+
+    total = frame_sequence + detection_index
+    return total * (total + 1) // 2 + detection_index
+
+
 def _observation(
     frame: TimestampedFrame,
     detection: PixelDetection,
@@ -53,8 +60,10 @@ def _observation(
         sensor_id=frame.sensor_id,
         xyz=xyz,
         conf=detection.confidence,
-        sequence=frame.sequence,
+        sequence=_detection_sequence(frame.sequence, detection.detection_index),
         covariance=tuple(tuple(float(item) for item in row) for row in covariance),
+        frame_sequence=frame.sequence,
+        detection_index=detection.detection_index,
     )
 
 

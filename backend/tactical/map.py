@@ -68,6 +68,45 @@ class AABB:
                 return False
         return leave >= epsilon and enter <= 1.0 - epsilon
 
+    def intersects_actor_segment(
+        self,
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+        horizontal_clearance: float,
+        epsilon: float = 1e-9,
+    ) -> bool:
+        """Return whether a closed actor segment enters the horizontally inflated box."""
+
+        minimum = (
+            self.minimum[0] - horizontal_clearance,
+            self.minimum[1],
+            self.minimum[2] - horizontal_clearance,
+        )
+        maximum = (
+            self.maximum[0] + horizontal_clearance,
+            self.maximum[1],
+            self.maximum[2] + horizontal_clearance,
+        )
+        direction = np.subtract(end, start, dtype=np.float64)
+        enter, leave = 0.0, 1.0
+        for axis in range(3):
+            origin = start[axis]
+            delta = float(direction[axis])
+            low, high = minimum[axis], maximum[axis]
+            if abs(delta) <= epsilon:
+                if origin < low - epsilon or origin > high + epsilon:
+                    return False
+                continue
+            near = (low - origin) / delta
+            far = (high - origin) / delta
+            if near > far:
+                near, far = far, near
+            enter = max(enter, near)
+            leave = min(leave, far)
+            if enter > leave + epsilon:
+                return False
+        return leave >= -epsilon and enter <= 1.0 + epsilon
+
 
 @dataclass(frozen=True, slots=True)
 class TacticalMap:
@@ -87,6 +126,39 @@ class TacticalMap:
         start = _point(start, "start")
         end = _point(end, "end")
         return any(box.intersects_segment(start, end) for box in self.obstacles)
+
+    def segment_collides(
+        self,
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+        *,
+        horizontal_clearance: float = 0.0,
+    ) -> bool:
+        """Query movement collision with horizontal actor clearance."""
+
+        start = _point(start, "start")
+        end = _point(end, "end")
+        clearance = float(horizontal_clearance)
+        if not math.isfinite(clearance) or clearance < 0.0:
+            raise ValueError("horizontal_clearance must be finite and non-negative")
+        return any(
+            box.intersects_actor_segment(start, end, clearance)
+            for box in self.obstacles
+        )
+
+    def openness_at(self, xyz: tuple[float, float, float]) -> float:
+        """Return authored openness, preferring the most covered overlapping zone."""
+
+        point = _point(xyz, "xyz")
+        matching = [
+            float(zone["openness"])
+            for zone in self.zones
+            if all(
+                float(zone["min"][axis]) <= point[axis] <= float(zone["max"][axis])
+                for axis in range(3)
+            )
+        ]
+        return min(matching, default=1.0)
 
     def ray_occluded(
         self,
@@ -195,6 +267,15 @@ def load_map(path: str | Path = DEFAULT_MAP_PATH) -> TacticalMap:
         zone["max"] = _point(zone.get("max"), "zones.max")
         if any(a >= b for a, b in zip(zone["min"], zone["max"])):
             raise ValueError(f"zone {zone['id']!r} must have positive extent")
+        openness = zone.get("openness")
+        if (
+            isinstance(openness, bool)
+            or not isinstance(openness, (int, float))
+            or not math.isfinite(float(openness))
+            or not 0.0 <= float(openness) <= 1.0
+        ):
+            raise ValueError(f"zone {zone['id']!r} openness must be in [0, 1]")
+        zone["openness"] = float(openness)
     intents = _validate_named_entries(data.get("intents"), "intents")
     return TacticalMap(
         name=str(data.get("name", "")),

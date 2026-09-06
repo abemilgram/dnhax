@@ -33,6 +33,9 @@ DEFAULT_TAPE_PATH = (
 
 
 class TacticalPersistence(Protocol):
+    def load_revision(self, session_id: str) -> int:
+        ...
+
     def save_session(
         self,
         session_id: str,
@@ -102,7 +105,11 @@ class TacticalService:
         self.session_id = session_id or f"replay:{tape.tape_id}"
         self.config = config or ServiceConfig()
         self._lock = threading.RLock()
-        self._revision = 0
+        self._revision = (
+            self.persistence.load_revision(self.session_id)
+            if self.persistence is not None
+            else 0
+        )
         self._playing = False
         self._wall_anchor = float(self.clock())
         self._replay_anchor = 0.0

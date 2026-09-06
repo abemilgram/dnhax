@@ -39,6 +39,7 @@ class PlannerConfig:
     acceleration_noise: float = 0.7
     max_observers: int = 16
     max_graph_snap_distance: float = 2.5
+    actor_horizontal_clearance: float = 0.35
     goal_radius: float = 0.25
 
     def __post_init__(self) -> None:
@@ -59,6 +60,12 @@ class PlannerConfig:
         if not math.isfinite(noise) or noise < 0.0:
             raise ValueError("acceleration_noise must be finite and non-negative")
         object.__setattr__(self, "acceleration_noise", noise)
+        clearance = float(self.actor_horizontal_clearance)
+        if not math.isfinite(clearance) or clearance < 0.0:
+            raise ValueError(
+                "actor_horizontal_clearance must be finite and non-negative"
+            )
+        object.__setattr__(self, "actor_horizontal_clearance", clearance)
         for name in ("rollouts_per_intent", "max_observers"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -79,7 +86,10 @@ class TacticalPlanner:
     ) -> None:
         self.map = tactical_map
         self.config = config or PlannerConfig()
-        self.graph = NavGraph(tactical_map)
+        self.graph = NavGraph(
+            tactical_map,
+            actor_horizontal_clearance=self.config.actor_horizontal_clearance,
+        )
 
     def plan(
         self,
@@ -102,6 +112,16 @@ class TacticalPlanner:
                 for kind in IntentKind
             )
             return PlanRanking(actor.t, cycle_index, candidates)
+        if self.map.segment_collides(
+            actor.xyz,
+            nearest.xyz,
+            horizontal_clearance=self.config.actor_horizontal_clearance,
+        ):
+            candidates = tuple(
+                self._invalid_candidate(actor.t, kind, "actor_connector_blocked")
+                for kind in IntentKind
+            )
+            return PlanRanking(actor.t, cycle_index, candidates)
 
         tracks = self._select_observers(tuple(observers), actor)
         rng = np.random.default_rng(self._stable_seed(cycle_index))
@@ -118,6 +138,8 @@ class TacticalPlanner:
             try:
                 node_path = self.graph.intent_path(kind, nearest.node_id)
                 route_points = self.graph.path_points(node_path)
+                if snap_distance > 1e-12:
+                    route_points = (actor.xyz,) + route_points
             except ValueError:
                 candidates.append(
                     self._invalid_candidate(actor.t, kind, "route_unavailable")

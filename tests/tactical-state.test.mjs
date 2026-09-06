@@ -6,6 +6,7 @@ import {
   covarianceEllipse95,
   mergeCueHistory,
   rankedIntentLabel,
+  riskBandForScore,
   riskBandLabel,
   timelineAdditions,
 } from '../app/tactical/state.mjs';
@@ -69,6 +70,10 @@ test('provides explicit risk and ranked intent labels', () => {
   assert.equal(riskBandLabel('medium'), 'Moderate geometric risk');
   assert.equal(riskBandLabel('high'), 'High geometric risk');
   assert.equal(rankedIntentLabel('FLANK', 2), '2. FLANK');
+  assert.equal(riskBandForScore(0.249), 'low');
+  assert.equal(riskBandForScore(0.25), 'medium');
+  assert.equal(riskBandForScore(0.549), 'medium');
+  assert.equal(riskBandForScore(0.55), 'high');
 });
 
 test('computes a rotated 95 percent covariance ellipse', () => {

@@ -106,6 +106,9 @@ def cleanup(request: CleanupRequest):
 @app.post("/api/reset")
 def reset():
     store.reset_workspace()
+    from .tactical import api as tactical_api
+
+    tactical_api.invalidate_service(store.ROOT)
     return {"reset": True}
 
 

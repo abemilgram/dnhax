@@ -76,6 +76,8 @@ class Observation:
     conf: float
     sequence: int
     covariance: tuple[tuple[float, float, float], ...] | None = None
+    frame_sequence: int | None = None
+    detection_index: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "t", _finite_float(self.t, "t"))
@@ -90,6 +92,18 @@ class Observation:
             raise ValueError("sequence must be an integer")
         if self.sequence < 0:
             raise ValueError("sequence must be non-negative")
+        if self.frame_sequence is not None and (
+            isinstance(self.frame_sequence, bool)
+            or not isinstance(self.frame_sequence, int)
+            or self.frame_sequence < 0
+        ):
+            raise ValueError("frame_sequence must be a non-negative integer")
+        if (
+            isinstance(self.detection_index, bool)
+            or not isinstance(self.detection_index, int)
+            or self.detection_index < 0
+        ):
+            raise ValueError("detection_index must be a non-negative integer")
         object.__setattr__(self, "covariance", _covariance(self.covariance))
 
 
@@ -130,6 +144,7 @@ class TrackSnapshot:
 
     track_id: int
     t: float
+    last_observed_t: float
     xyz: tuple[float, float, float]
     velocity_xz: tuple[float, float]
     covariance: tuple[tuple[float, float, float, float], ...]
@@ -147,6 +162,10 @@ class TrackSnapshot:
         ):
             raise ValueError("track_id must be a positive integer")
         object.__setattr__(self, "t", _finite_float(self.t, "t"))
+        observed_t = _finite_float(self.last_observed_t, "last_observed_t")
+        if observed_t > self.t:
+            raise ValueError("last_observed_t must not exceed t")
+        object.__setattr__(self, "last_observed_t", observed_t)
         object.__setattr__(self, "xyz", _vector(self.xyz, 3, "xyz"))
         object.__setattr__(
             self, "velocity_xz", _vector(self.velocity_xz, 2, "velocity_xz")

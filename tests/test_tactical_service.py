@@ -15,7 +15,11 @@ from backend.tactical import (
     PixelDetection,
     RayGroundCalibration,
     RayGroundProjector,
+    SensorSpec,
+    TacticalTracker,
     TimestampedFrame,
+    TrackerConfig,
+    load_map,
     load_tape,
 )
 from backend.tactical.service import DEFAULT_TAPE_PATH, TacticalService
@@ -34,11 +38,25 @@ class MemoryPersistence:
         self.sessions = []
         self.cues = []
 
+    def load_revision(self, session_id):
+        return next(
+            (
+                values[-1]
+                for values in reversed(self.sessions)
+                if values[0] == session_id
+            ),
+            0,
+        )
+
     def save_session(self, *values):
         self.sessions.append(values)
 
     def save_cue(self, session_id, revision, cue):
-        self.cues.append((session_id, revision, deepcopy(cue)))
+        if not any(
+            stored_session == session_id and stored_cue["sequence"] == cue["sequence"]
+            for stored_session, _, stored_cue in self.cues
+        ):
+            self.cues.append((session_id, revision, deepcopy(cue)))
 
 
 def test_golden_tape_validates_and_encodes_required_belief_beats():
@@ -115,6 +133,28 @@ def test_rebuild_does_not_duplicate_persisted_cues():
     assert len(persistence.cues) == first_count
 
 
+def test_service_recreation_seeds_revision_and_refreshes_stale_cursor():
+    persistence = MemoryPersistence()
+    first = TacticalService.from_path(
+        clock=lambda: 0.0,
+        persistence=persistence,
+        session_id="persistent-session",
+    )
+    stale_revision = first.advance_to(1.0)["revision"]
+    recreated = TacticalService.from_path(
+        clock=lambda: 0.0,
+        persistence=persistence,
+        session_id="persistent-session",
+    )
+    current = recreated.current()
+    assert current["revision"] > stale_revision
+    assert recreated.events_since(stale_revision)[-1] == (
+        "snapshot",
+        current["revision"],
+        current,
+    )
+
+
 def test_malformed_tapes_and_replay_input_are_rejected(tmp_path):
     data = json.loads(Path(DEFAULT_TAPE_PATH).read_text())
     malformed = tmp_path / "malformed.json"
@@ -156,9 +196,45 @@ def test_homography_projects_bottom_center_and_propagates_uncertainty():
     observation = projector.project(frame, detection)
     assert observation.xyz == pytest.approx((0.0, 0.0, 2.0))
     assert observation.t == frame.t
-    assert observation.sequence == frame.sequence
+    assert observation.frame_sequence == frame.sequence
+    assert observation.detection_index == detection.detection_index
     assert observation.conf == detection.confidence
     assert np.asarray(observation.covariance)[0, 0] > 0.0
+
+
+def test_two_detections_in_one_frame_have_unique_tracker_sequences():
+    frame = TimestampedFrame("aerial", 1.5, 7, 200, 200, b"pixels")
+    projector = FixedAerialProjector(
+        HomographyCalibration(
+            image_to_ground_xz=(
+                (0.1, 0.0, -10.0),
+                (0.0, 0.1, -10.0),
+                (0.0, 0.0, 1.0),
+            ),
+            ground_bounds=((-5.0, 5.0), (-5.0, 5.0)),
+        )
+    )
+    observations = [
+        projector.project(
+            frame,
+            PixelDetection(
+                70 + 40 * index,
+                80,
+                90 + 40 * index,
+                100,
+                1.0,
+                detection_index=index,
+            ),
+        )
+        for index in range(2)
+    ]
+    assert observations[0].sequence != observations[1].sequence
+    tracker = TacticalTracker(
+        load_map(),
+        [SensorSpec("aerial", (0.0, 2.0, -10.0), max_range=100.0)],
+        TrackerConfig(confirmation_hits=1),
+    )
+    assert len(tracker.step(frame.t, observations)) == 2
 
 
 def test_ray_projection_accuracy_and_invalid_calibration_rejection():

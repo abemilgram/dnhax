@@ -126,6 +126,23 @@ def test_occluded_dropout_survives_while_visible_miss_expires():
     assert visible_snapshots == ()
 
 
+def test_equal_tracker_timestamps_are_rejected_without_aging_track():
+    tracker = TacticalTracker(
+        empty_map(),
+        [SENSOR],
+        TrackerConfig(
+            confirmation_hits=1,
+            visible_miss_limit=2,
+            max_coast_seconds=100.0,
+        ),
+    )
+    initial = tracker.step(0.0, [observation(0.0, 0.0)])
+    with pytest.raises(ValueError, match="strictly increase"):
+        tracker.step(0.0)
+    assert tracker.snapshots() == initial
+    assert tracker.snapshots()[0].misses == 0
+
+
 def test_crossing_ambiguity_sets_conflicting_evidence():
     tracker = TacticalTracker(
         empty_map(),
@@ -200,4 +217,27 @@ def test_checked_in_map_validates_and_occludes_deterministically(tmp_path):
         )
     )
     with pytest.raises(ValueError, match="coordinate_system"):
+        load_map(malformed)
+
+    malformed.write_text(
+        json.dumps(
+            {
+                "name": "bad-openness",
+                "coordinate_system": "right-handed:x-east,y-up,z-north",
+                "obstacles": [],
+                "nav_nodes": [],
+                "nav_edges": [],
+                "zones": [
+                    {
+                        "id": "zone",
+                        "min": [0.0, 0.0, 0.0],
+                        "max": [1.0, 1.0, 1.0],
+                        "openness": 1.1,
+                    }
+                ],
+                "intents": [],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="openness"):
         load_map(malformed)

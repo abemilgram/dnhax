@@ -53,6 +53,14 @@ class SqliteTacticalPersistence:
         self._connect = connect
         self._clock = clock
 
+    def load_revision(self, session_id: str) -> int:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT revision FROM tactical_sessions WHERE id=?",
+                (session_id,),
+            ).fetchone()
+        return max(0, int(row["revision"])) if row is not None else 0
+
     def save_session(
         self,
         session_id: str,

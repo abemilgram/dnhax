@@ -34,6 +34,12 @@ export function riskBandLabel(band) {
   return 'Unknown geometric risk';
 }
 
+export function riskBandForScore(risk) {
+  if (risk < 0.25) return 'low';
+  if (risk < 0.55) return 'medium';
+  return 'high';
+}
+
 export function rankedIntentLabel(intent, rank) {
   return `${rank}. ${intent}`;
 }

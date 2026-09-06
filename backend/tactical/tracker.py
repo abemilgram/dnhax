@@ -132,8 +132,8 @@ class TacticalTracker:
         t = float(t)
         if not math.isfinite(t):
             raise ValueError("t must be finite")
-        if self._last_t is not None and t < self._last_t:
-            raise ValueError("tracker time must be monotonically non-decreasing")
+        if self._last_t is not None and t <= self._last_t:
+            raise ValueError("tracker time must strictly increase")
         ordered = sorted(
             tuple(observations),
             key=lambda item: (item.sensor_id, item.sequence, item.xyz),
@@ -234,6 +234,7 @@ class TacticalTracker:
             TrackSnapshot(
                 track_id=track.track_id,
                 t=track.t,
+                last_observed_t=track.last_observed_t,
                 xyz=(float(track.state[0]), track.y, float(track.state[1])),
                 velocity_xz=(float(track.state[2]), float(track.state[3])),
                 covariance=tuple(

@@ -52,6 +52,7 @@ class PixelDetection:
     confidence: float
     class_id: str = "entity"
     covariance_px: tuple[tuple[float, float], tuple[float, float]] | None = None
+    detection_index: int = 0
 
     def __post_init__(self) -> None:
         for name in ("x_min", "y_min", "x_max", "y_max"):
@@ -66,6 +67,12 @@ class PixelDetection:
         object.__setattr__(self, "confidence", confidence)
         if not isinstance(self.class_id, str) or not self.class_id:
             raise ValueError("class_id must be a non-empty string")
+        if (
+            isinstance(self.detection_index, bool)
+            or not isinstance(self.detection_index, int)
+            or self.detection_index < 0
+        ):
+            raise ValueError("detection_index must be a non-negative integer")
         if self.covariance_px is not None:
             rows = tuple(tuple(_finite(item, "covariance_px") for item in row) for row in self.covariance_px)
             if len(rows) != 2 or any(len(row) != 2 for row in rows):

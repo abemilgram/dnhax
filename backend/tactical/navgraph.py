@@ -27,7 +27,17 @@ class IntentDefinition:
 class NavGraph:
     """An immutable view of a ``TacticalMap`` navigation graph."""
 
-    def __init__(self, tactical_map: TacticalMap) -> None:
+    def __init__(
+        self,
+        tactical_map: TacticalMap,
+        *,
+        actor_horizontal_clearance: float = 0.0,
+    ) -> None:
+        clearance = float(actor_horizontal_clearance)
+        if not math.isfinite(clearance) or clearance < 0.0:
+            raise ValueError(
+                "actor_horizontal_clearance must be finite and non-negative"
+            )
         nodes = tuple(
             NavNode(node["id"], tuple(float(value) for value in node["xyz"]))
             for node in tactical_map.nav_nodes
@@ -71,9 +81,14 @@ class NavGraph:
                 raise ValueError(f"duplicate navigation connection {pair!r}")
             edge_pairs.add(pair)
             edge_cost = float(cost)
-            adjacency[start].append((end, edge_cost, edge_id))
-            if not directed:
-                adjacency[end].append((start, edge_cost, edge_id))
+            if not tactical_map.segment_collides(
+                self._nodes[start].xyz,
+                self._nodes[end].xyz,
+                horizontal_clearance=clearance,
+            ):
+                adjacency[start].append((end, edge_cost, edge_id))
+                if not directed:
+                    adjacency[end].append((start, edge_cost, edge_id))
             distance = _distance(self._nodes[start].xyz, self._nodes[end].xyz)
             if distance > 1e-12:
                 heuristic_scales.append(edge_cost / distance)
@@ -91,8 +106,16 @@ class NavGraph:
         self._intents = self._parse_intents(tactical_map.intents)
 
     @classmethod
-    def from_map(cls, tactical_map: TacticalMap) -> "NavGraph":
-        return cls(tactical_map)
+    def from_map(
+        cls,
+        tactical_map: TacticalMap,
+        *,
+        actor_horizontal_clearance: float = 0.0,
+    ) -> "NavGraph":
+        return cls(
+            tactical_map,
+            actor_horizontal_clearance=actor_horizontal_clearance,
+        )
 
     @property
     def nodes(self) -> tuple[NavNode, ...]:

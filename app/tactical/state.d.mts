@@ -26,6 +26,7 @@ export function timelineAdditions(
 ): TacticalCue[];
 
 export function riskBandLabel(band: RiskBand): string;
+export function riskBandForScore(risk: number): RiskBand;
 export function rankedIntentLabel(intent: string, rank: number): string;
 
 export function covarianceEllipse95(covariance: Matrix4): {

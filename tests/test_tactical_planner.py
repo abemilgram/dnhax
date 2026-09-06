@@ -30,7 +30,7 @@ from backend.tactical.map import AABB
 
 def planner_map(*, covered=True):
     obstacles = (
-        (AABB("flank_cover", (-3.0, 0.0, -1.0), (-2.0, 3.0, 11.0)),)
+        (AABB("flank_cover", (-3.0, 0.0, 1.0), (-2.0, 3.0, 9.0)),)
         if covered
         else ()
     )
@@ -52,7 +52,18 @@ def planner_map(*, covered=True):
             {"id": "flank_corridor", "from": "flank_a", "to": "flank_b", "cost": 10.0},
             {"id": "flank_exit", "from": "flank_b", "to": "goal", "cost": 5.0},
         ),
-        zones=(),
+        zones=(
+            (
+                {
+                    "id": "covered_flank",
+                    "min": (-6.0, 0.0, -1.0),
+                    "max": (-4.0, 3.0, 11.0),
+                    "openness": 0.2,
+                },
+            )
+            if covered
+            else ()
+        ),
         intents=(
             {"id": "hold", "kind": "HOLD", "anchor": "start"},
             {
@@ -76,6 +87,7 @@ def observer(*, variance=1e-6):
     return TrackSnapshot(
         track_id=1,
         t=0.0,
+        last_observed_t=0.0,
         xyz=(0.0, 1.0, 5.0),
         velocity_xz=(0.0, 0.0),
         covariance=tuple(tuple(float(value) for value in row) for row in covariance),
@@ -148,10 +160,10 @@ def test_graph_validation_and_astar_ties_are_deterministic():
 
 def test_every_authored_path_and_public_route_stays_on_graph():
     tactical_map = load_map()
-    graph = NavGraph(tactical_map)
     planner = TacticalPlanner(
         tactical_map, PlannerConfig(rollouts_per_intent=2, scenario_seed="routes")
     )
+    graph = planner.graph
     actor = ActorState(2.0, (0.0, 0.0, -10.0))
     result = planner.plan(actor)
     assert {item.intent for item in result.candidates} == set(IntentKind)
@@ -173,6 +185,48 @@ def test_every_authored_path_and_public_route_stays_on_graph():
         )
 
 
+def test_obstacle_edges_and_blocked_actor_connectors_invalidate_routes():
+    edge_map = replace(
+        planner_map(covered=False),
+        obstacles=(AABB("cross_block", (-0.5, 0.0, 4.0), (0.5, 2.0, 6.0)),),
+    )
+    assert edge_map.segment_collides(
+        (-2.0, 0.0, 4.0),
+        (2.0, 0.0, 4.0),
+        horizontal_clearance=0.0,
+    )
+    ranking = TacticalPlanner(edge_map).plan(ActorState(0.0, (0.0, 0.0, 0.0)))
+    cross = next(item for item in ranking.candidates if item.intent is IntentKind.CROSS)
+    assert not cross.valid
+    assert cross.reasons == ("route_unavailable",)
+
+    connector_map = replace(
+        planner_map(covered=False),
+        obstacles=(AABB("connector_block", (0.4, 0.0, -0.2), (0.6, 2.0, 0.2)),),
+    )
+    blocked = TacticalPlanner(connector_map).plan(
+        ActorState(0.0, (1.0, 0.0, 0.0))
+    )
+    assert all(not item.valid for item in blocked.candidates)
+    assert all(
+        item.reasons == ("actor_connector_blocked",)
+        for item in blocked.candidates
+    )
+
+
+def test_actor_connector_is_included_in_route_and_distance():
+    planner = TacticalPlanner(
+        planner_map(covered=False),
+        PlannerConfig(rollouts_per_intent=2, scenario_seed="connector"),
+    )
+    actor = ActorState(0.0, (0.5, 0.0, 0.5))
+    ranking = planner.plan(actor)
+    cross = next(item for item in ranking.candidates if item.intent is IntentKind.CROSS)
+    assert cross.valid
+    assert cross.route[0].xyz == actor.xyz
+    assert cross.score.route_length == pytest.approx(10.0 + math.sqrt(0.5))
+
+
 def test_cover_blocks_los_and_uncertainty_worsens_route_risk():
     tactical_map = planner_map(covered=True)
     route = tuple(
@@ -182,10 +236,33 @@ def test_cover_blocks_los_and_uncertainty_worsens_route_risk():
     precise = evaluate_route(tactical_map, route, [observer(variance=1e-6)])
     uncertain = evaluate_route(tactical_map, route, [observer(variance=4.0)])
     assert precise.los_fraction == 0.0
-    assert precise.time_in_open == 0.0
+    assert precise.open_fraction == pytest.approx(0.2)
+    assert precise.time_in_open > 0.0
     assert uncertain.uncertainty_risk > precise.uncertainty_risk
     assert uncertain.risk_std > precise.risk_std
     assert uncertain.risk_score > precise.risk_score
+
+
+def test_openness_is_independent_of_observers_and_covered_routes_are_lower():
+    route = tuple(
+        TimedPoint(float(index), (-5.0, 0.0, float(index)))
+        for index in range(10)
+    )
+    open_score = evaluate_route(planner_map(covered=False), route, [])
+    covered_score = evaluate_route(planner_map(covered=True), route, [])
+    assert open_score.los_fraction == 0.0
+    assert open_score.open_fraction == 1.0
+    assert open_score.time_in_open > 0.0
+    assert covered_score.open_fraction < open_score.open_fraction
+
+
+def test_reliability_decays_from_last_observation_not_prediction_time():
+    stale = replace(observer(), t=5.0, last_observed_t=0.0)
+    fresh = replace(stale, last_observed_t=5.0)
+    route = (TimedPoint(5.0, (0.0, 0.0, 0.0)),)
+    stale_score = evaluate_route(planner_map(covered=False), route, [stale])
+    fresh_score = evaluate_route(planner_map(covered=False), route, [fresh])
+    assert stale_score.exposure_fraction < fresh_score.exposure_fraction
 
 
 def test_covered_flank_beats_exposed_cross_and_geometry_can_reverse_it():

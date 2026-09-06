@@ -57,7 +57,7 @@ def interpolate_polyline(points: Sequence[Point], distance: float) -> Point:
 
 
 def observer_reliability(track: TrackSnapshot, t: float) -> float:
-    age = max(0.0, float(t) - track.t)
+    age = max(0.0, float(t) - track.last_observed_t)
     decay = math.exp(-age / 1.5)
     if track.evidence is EvidenceState.OBSERVED:
         return decay
@@ -152,9 +152,11 @@ def score_rollouts(
     rollout_count, step_count, _ = actors.shape
     los_values = np.zeros((rollout_count, step_count), dtype=np.float64)
     exposure_values = np.zeros_like(los_values)
+    openness_values = np.zeros_like(los_values)
     for rollout in range(rollout_count):
         for step in range(step_count):
             actor = tuple(float(value) for value in actors[rollout, step])
+            openness_values[rollout, step] = tactical_map.openness_at(actor)
             best_exposure = 0.0
             any_los = False
             for observer_index in range(observers.shape[1]):
@@ -175,8 +177,10 @@ def score_rollouts(
     rollout_exposure = exposure_values.mean(axis=1)
     los_fraction = float(los_values.mean())
     exposure_fraction = float(exposure_values.mean())
-    open_fraction = los_fraction
-    time_in_open = float(los_values.sum(axis=1).mean() * max(0.0, dt))
+    open_fraction = float(openness_values.mean())
+    time_in_open = float(
+        openness_values.sum(axis=1).mean() * max(0.0, dt)
+    )
     tail_count = max(1, math.ceil(rollout_count * 0.1))
     exposure_cvar90 = float(np.sort(rollout_exposure)[-tail_count:].mean())
     if len(observer_uncertainties):

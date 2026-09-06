@@ -108,6 +108,32 @@ def test_cues_are_not_duplicated_in_sqlite_after_rebuild(tmp_path, monkeypatch):
         assert second == first
 
 
+def test_workspace_reset_recreates_tactical_service_on_reset_database(
+    tmp_path, monkeypatch
+):
+    with client_for(tmp_path, monkeypatch) as client:
+        client.post("/api/tactical/seek", json={"position": 3.0})
+        key = str(store.ROOT)
+        previous = tactical_api._services[key]
+
+        response = client.post("/api/reset")
+        assert response.status_code == 200
+        assert key not in tactical_api._services
+
+        fresh_state = client.get("/api/tactical/state").json()
+        assert tactical_api._services[key] is not previous
+        assert fresh_state["replay"]["position"] == 0.0
+        with store.connect() as db:
+            session = db.execute(
+                "SELECT replay_time,revision FROM tactical_sessions "
+                "WHERE id='golden-a-site'"
+            ).fetchone()
+        assert dict(session) == {
+            "replay_time": 0.0,
+            "revision": fresh_state["revision"],
+        }
+
+
 def test_tactical_router_is_registered_before_static_mount():
     paths = [getattr(route, "path", "") for route in app.routes]
     assert "/api/tactical/state" in paths
