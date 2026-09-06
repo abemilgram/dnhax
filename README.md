@@ -4,7 +4,7 @@
 
 A local three-device demo for submitted room captures. Two browsers upload independent walkthroughs to a CUDA or Apple Silicon processing computer. A GPU worker reconstructs each capture; the viewer supports manual landmark registration, validation, and inspection of the combined point clouds.
 
-**This release processes submitted clips. It does not implement continuous keyframe streaming, live AR overlays, automatic MASt3R matching, VLM analysis, or metric calibration.**
+**Live batch capture is now available alongside submitted clips. See [LIVE_PROCESSING.md](LIVE_PROCESSING.md) for setup and limits. Live AR overlays, automatic MASt3R matching, VLM analysis, metric calibration and persistent whole-room fusion are not implemented.**
 
 ## What works without CUDA
 

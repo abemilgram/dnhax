@@ -494,3 +494,23 @@ footer {
     height: 65px;
   }
 }
+
+.live-panel {
+  margin: 24px 0;
+  border: 1px solid var(--border, #bbc9cc);
+  padding: 20px;
+  border-radius: 12px;
+}
+.live-panel .toolbar {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.live-panel .source-grid {
+  margin-top: 18px;
+}
+.live-panel select {
+  padding: 7px;
+  margin-left: 8px;
+  border: 1px solid #bbc9cc;
+  border-radius: 6px;
+}

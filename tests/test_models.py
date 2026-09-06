@@ -5,6 +5,7 @@ from backend import models, reconstruct, store
 
 def test_model_selection_and_missing_explicit_checkpoint(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "ROOT", tmp_path)
+    monkeypatch.setattr(models.Path, "home", lambda: tmp_path)
     monkeypatch.delenv("VGGT_OMEGA_CHECKPOINT", raising=False)
     monkeypatch.setenv("SIMV1_MODEL", "auto")
     assert models.model_config()["key"] == "vggt"

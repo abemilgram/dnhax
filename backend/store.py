@@ -18,6 +18,7 @@ def connect():
     ROOT.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(ROOT / "workspace.sqlite", timeout=20)
     db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys=ON")
     db.execute("PRAGMA journal_mode=WAL")
     db.executescript("""
     CREATE TABLE IF NOT EXISTS captures(id TEXT PRIMARY KEY, source TEXT NOT NULL, name TEXT NOT NULL, created REAL NOT NULL, path TEXT NOT NULL);
@@ -26,6 +27,9 @@ def connect():
     CREATE TABLE IF NOT EXISTS scenes(id TEXT PRIMARY KEY, created REAL NOT NULL, manifest TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS heartbeat(id INTEGER PRIMARY KEY CHECK(id=1), updated REAL NOT NULL, device TEXT NOT NULL);
     """)
+    from .live_schema import migrate
+
+    migrate(db)
     try:
         with db:
             yield db
@@ -63,11 +67,13 @@ def update(job, stage, status="running", error=None):
         )
 
 
-def claim():
+def claim(prefer_live=False):
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
         row = db.execute(
-            "SELECT * FROM jobs WHERE status='queued' ORDER BY created LIMIT 1"
+            "SELECT * FROM jobs WHERE status='queued' ORDER BY (kind='live') "
+            + ("DESC" if prefer_live else "ASC")
+            + ", created LIMIT 1"
         ).fetchone()
         if row:
             db.execute(

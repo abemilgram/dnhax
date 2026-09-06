@@ -22,13 +22,14 @@ import {
 } from 'lucide-react';
 import Viewer from './viewer';
 import Capture from './capture';
+import LiveCapture from './live-capture';
 import FrameInspector from './frame-inspector';
 import {
   isCombinedScene,
   nextSceneId,
   sceneLabel,
 } from './scene-selection.mjs';
-import type { State } from './types';
+import type { Scene, State } from './types';
 const empty: State = {
   captures: [],
   jobs: [],
@@ -65,6 +66,9 @@ async function request(path: string, body?: unknown) {
 }
 export default function Home() {
   const [state, setState] = useState<State>(empty);
+  const [liveScene, setLiveScene] = useState<Scene | null>(null);
+  const [followLive, setFollowLive] = useState(true);
+  const receiveLive = useCallback((scene: Scene) => setLiveScene(scene), []);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState('alignment');
@@ -114,7 +118,8 @@ export default function Home() {
       clearTimeout(timer);
     };
   }, [refresh]);
-  const scene = state.scenes.find((s) => s.id === sceneId) || state.scenes[0];
+  const scene =
+    liveScene || state.scenes.find((s) => s.id === sceneId) || state.scenes[0];
   const combinedScene = state.scenes.find(
     (s) => !s.sample && isCombinedScene(s),
   );
@@ -124,7 +129,7 @@ export default function Home() {
     ['queued', 'running'].includes(j.status),
   );
   useEffect(() => {
-    setVisible({ A: true, B: true });
+    if (!scene?.live) setVisible({ A: true, B: true });
     setPickSource(undefined);
     pendingTarget.current = null;
     setPairs({ source_points: [], target_points: [] });
@@ -133,6 +138,10 @@ export default function Home() {
   async function act(path: string, body: unknown = {}) {
     setBusy(true);
     setError('');
+    if (['sample', 'pair', 'joint', 'register'].includes(path)) {
+      setFollowLive(false);
+      setLiveScene(null);
+    }
     try {
       const result = await request(path, body);
       await refresh();
@@ -260,6 +269,11 @@ export default function Home() {
           captures and process scenes.
         </output>
       )}
+      <LiveCapture
+        follow={followLive}
+        onFollow={setFollowLive}
+        onScene={receiveLive}
+      />
       <Tabs value={view} onValueChange={(value) => setView(String(value))}>
         <TabsList className="navigation">
           <TabsTrigger value="sources">01 / Sources</TabsTrigger>
@@ -395,7 +409,11 @@ export default function Home() {
                   <Select
                     value={scene?.id}
                     onValueChange={(v) => {
-                      if (v) setSceneId(v);
+                      if (v) {
+                        setFollowLive(false);
+                        setLiveScene(null);
+                        setSceneId(v);
+                      }
                     }}
                   >
                     <SelectTrigger
@@ -528,6 +546,8 @@ export default function Home() {
                           <Button
                             variant="outline"
                             onClick={() => {
+                              setFollowLive(false);
+                              if (scene) setLiveScene(scene);
                               setAligned(false);
                               setPickSource('A');
                             }}
@@ -715,7 +735,7 @@ export default function Home() {
         )}
       </section>
       <footer>
-        Submitted captures → independent reconstruction → validated alignment
+        Live batches and submitted captures · reconstruction in arbitrary units
         <span>{state.worker.device}</span>
       </footer>
     </main>

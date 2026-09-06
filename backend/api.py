@@ -28,7 +28,7 @@ def state():
         scenes = [
             json.loads(r["manifest"])
             for r in db.execute(
-                "SELECT manifest FROM scenes ORDER BY created DESC LIMIT 10"
+                "SELECT manifest FROM scenes WHERE json_extract(manifest, '$.live') IS NULL ORDER BY created DESC LIMIT 10"
             )
         ]
     return {
@@ -143,7 +143,9 @@ def joint(request: PairRequest):
         raise HTTPException(422, "Choose two different captures.")
     with store.connect() as db:
         for identity, source in [(request.capture_a, "A"), (request.capture_b, "B")]:
-            capture = db.execute("SELECT source FROM captures WHERE id=?", (identity,)).fetchone()
+            capture = db.execute(
+                "SELECT source FROM captures WHERE id=?", (identity,)
+            ).fetchone()
             if not capture:
                 raise HTTPException(404, f"Source {source} capture not found.")
             if capture["source"] != source:
@@ -182,8 +184,17 @@ def artifact(relative: str):
         or not path.is_file()
     ):
         raise HTTPException(404, "Artifact not found.")
+    parts = Path(relative).parts
+    if parts[0] == 'scenes':
+        with store.connect() as db:
+            if len(parts) < 3 or not db.execute('SELECT 1 FROM scenes WHERE id=?', (parts[1],)).fetchone():
+                raise HTTPException(404, 'Scene has not been published.')
     return FileResponse(path)
 
+
+from .live_api import router as live_router
+
+app.include_router(live_router)
 
 # Production export: one origin serves interface and API on port 8000.
 web = Path(__file__).resolve().parents[1] / "dist" / "client"

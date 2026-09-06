@@ -86,6 +86,11 @@ def process(job):
     identity = job["id"]
     payload = job["payload"]
     kind = job["kind"]
+    if kind == "live":
+        from .live import process as process_live
+
+        process_live(job)
+        return
     if kind == "sample":
         store.update(identity, "Generating labeled sample geometry")
         store.publish(sample_scene())
@@ -115,20 +120,33 @@ def process(job):
         from .joint import reconstruct_joint
 
         with store.connect() as db:
-            captures = [dict(db.execute("SELECT * FROM captures WHERE id=?", (payload[key],)).fetchone())
-                        for key in ("capture_a", "capture_b")]
+            captures = [
+                dict(
+                    db.execute(
+                        "SELECT * FROM captures WHERE id=?", (payload[key],)
+                    ).fetchone()
+                )
+                for key in ("capture_a", "capture_b")
+            ]
         scene_id = store.uid()
         clouds, reconstruction = reconstruct_joint(
-            captures, store.ROOT / "scenes" / scene_id,
+            captures,
+            store.ROOT / "scenes" / scene_id,
             lambda stage: store.update(identity, stage),
         )
-        store.publish({
-            "id": scene_id, "created": time.time(), "sample": False,
-            "title": "Joint A + B", "clouds": clouds, "diagnostics": None,
-            "reconstruction": reconstruction,
-            "scale_source": "None — arbitrary reconstruction units",
-            "provenance": f"A and B reconstructed together by {reconstruction['model']} in one shared coordinate system. Alignment quality is unverified.",
-        })
+        store.publish(
+            {
+                "id": scene_id,
+                "created": time.time(),
+                "sample": False,
+                "title": "Joint A + B",
+                "clouds": clouds,
+                "diagnostics": None,
+                "reconstruction": reconstruction,
+                "scale_source": "None — arbitrary reconstruction units",
+                "provenance": f"A and B reconstructed together by {reconstruction['model']} in one shared coordinate system. Alignment quality is unverified.",
+            }
+        )
     elif kind == "pair":
         store.update(
             identity, "Combining independent reconstructions for landmark alignment"
@@ -162,6 +180,7 @@ def process(job):
         matrix, diagnostics = register(
             payload["source_points"], payload["target_points"], payload["threshold"]
         )
+        scene.pop("live", None)
         scene.update(id=store.uid(), created=time.time(), diagnostics=diagnostics)
         scene["clouds"][1]["transform"] = matrix.tolist()
         scene["landmarks"] = {
@@ -180,6 +199,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
+    from .worker_lock import acquire
+    from . import live
+
+    lock = acquire()
     device = "CPU / sample and alignment available"
     try:
         import torch
@@ -191,12 +214,6 @@ def main():
         pass
     except (ValueError, RuntimeError) as exc:
         device = f"Compute configuration error: {exc}"
-    with store.connect() as db:
-        existing = db.execute("SELECT updated FROM heartbeat WHERE id=1").fetchone()
-        if existing and time.time() - existing["updated"] < 20:
-            raise RuntimeError(
-                "A worker is already active. Stop it before starting another."
-            )
 
     def terminate(_signum, _frame):
         raise KeyboardInterrupt
@@ -220,16 +237,44 @@ def main():
         db.execute(
             "UPDATE jobs SET status='failed',stage='Interrupted',error='Worker stopped before completion. Submit the job again.' WHERE status='running'"
         )
+    live.recover()
+    last_live = False
     print("simv1 worker:", device, flush=True)
     try:
         while True:
-            job = store.claim()
+            live.cleanup()
+            job = store.claim() if last_live else None
+            if not job:
+                live.schedule()
+                job = store.claim(prefer_live=True)
             if job:
+                watchdog = None
+                if job["kind"] == "live":
+                    import os
+
+                    def expire(batch_id=job["payload"]["batch_id"]):
+                        live.fail(
+                            batch_id,
+                            "Inference watchdog expired. Restart the worker and resume.",
+                        )
+                        os._exit(70)
+
+                    watchdog = threading.Timer(
+                        float(os.environ.get("SIMV1_LIVE_JOB_TIMEOUT", "900")), expire
+                    )
+                    watchdog.daemon = True
+                    watchdog.start()
                 try:
                     process(job)
                 except Exception as exc:
                     store.update(job["id"], "Processing failed", "failed", str(exc))
+                    if job["kind"] == "live":
+                        live.fail(job["payload"]["batch_id"], str(exc))
                     print("Job failed:", exc, flush=True)
+                finally:
+                    if watchdog:
+                        watchdog.cancel()
+                    last_live = job["kind"] == "live"
             if args.once:
                 break
             if not job:
@@ -240,10 +285,14 @@ def main():
         # Parent and terminal may both signal shutdown; finish cleanup once.
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        from .model_runtime import runtime
+
+        runtime.unload()
         stop.set()
         thread.join(timeout=5)
         with store.connect() as db:
             db.execute("DELETE FROM heartbeat WHERE id=1")
+        lock.close()
 
 
 if __name__ == "__main__":

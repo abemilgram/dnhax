@@ -25,6 +25,13 @@ export default function Viewer({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const objects = useRef<THREE.Points[]>([]);
+  const context = useRef<{
+    world: THREE.Scene;
+    camera: THREE.PerspectiveCamera;
+    controls: OrbitControls;
+    grid: THREE.GridHelper;
+  } | null>(null);
+  const displayedSegment = useRef('');
   const reset = useRef<() => void>(() => {});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -33,17 +40,10 @@ export default function Viewer({
   const setupState = useRef({ scene, aligned, visible, pointSize });
   setupState.current = { scene, aligned, visible, pointSize };
   useEffect(() => {
-    const {
-      scene: snapshot,
-      aligned: initialAligned,
-      visible: initialVisible,
-      pointSize: initialPointSize,
-    } = setupState.current;
     const target = host.current;
     if (!target) return;
     setError('');
     setLoading(true);
-    const abort = new AbortController();
     let disposed = false;
     let renderer: THREE.WebGLRenderer;
     try {
@@ -64,6 +64,7 @@ export default function Viewer({
     controls.enableDamping = true;
     const grid = new THREE.GridHelper(12, 24, 0x3a505d, 0x24343e);
     world.add(grid);
+    context.current = { world, camera, controls, grid };
     objects.current = [];
     let frame = 0;
     function draw() {
@@ -120,6 +121,40 @@ export default function Viewer({
     };
     renderer.domElement.addEventListener('pointerdown', down);
     renderer.domElement.addEventListener('pointerup', click);
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+      controls.dispose();
+      renderer.domElement.removeEventListener('pointerdown', down);
+      renderer.domElement.removeEventListener('pointerup', click);
+      world.traverse((o) => {
+        if (o instanceof THREE.Points || o instanceof THREE.LineSegments) {
+          o.geometry.dispose();
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((m) => m.dispose());
+        }
+      });
+      context.current = null;
+      renderer.dispose();
+      renderer.domElement.remove();
+      objects.current = [];
+    };
+  }, []);
+  useEffect(() => {
+    const {
+      scene: snapshot,
+      aligned: initialAligned,
+      visible: initialVisible,
+      pointSize: initialPointSize,
+    } = setupState.current;
+    const current = context.current;
+    if (!current) return;
+    const { world, camera, controls, grid } = current;
+    const abort = new AbortController();
+    let disposed = false;
+    setLoading(true);
+    setError('');
     async function load() {
       try {
         const loaded = await Promise.all(
@@ -133,13 +168,15 @@ export default function Viewer({
             const colors = new Uint8Array(await c.arrayBuffer());
             if (
               positions.length !== cloud.count * 3 ||
-              colors.length !== cloud.count * 3
+              colors.length !== cloud.count * 3 ||
+              positions.some((value) => !Number.isFinite(value))
             )
               throw Error('Scene geometry has an invalid length.');
             return { cloud, positions, colors };
           }),
         );
         if (disposed) return;
+        const next: THREE.Points[] = [];
         for (const { cloud, positions, colors } of loaded) {
           const geometry = new THREE.BufferGeometry();
           geometry.setAttribute(
@@ -206,9 +243,19 @@ export default function Viewer({
           );
           if (!initialAligned) points.matrix.identity();
           points.visible = initialVisible[cloud.source] !== false;
-          world.add(points);
-          objects.current.push(points);
+          next.push(points);
         }
+        const previous = objects.current;
+        next.forEach((points) => world.add(points));
+        objects.current = next;
+        previous.forEach((points) => {
+          world.remove(points);
+          points.geometry.dispose();
+          const materials = Array.isArray(points.material)
+            ? points.material
+            : [points.material];
+          materials.forEach((material) => material.dispose());
+        });
         const bounds = new THREE.Box3();
         objects.current.forEach((o) => {
           o.updateMatrixWorld(true);
@@ -228,7 +275,9 @@ export default function Viewer({
           camera.updateProjectionMatrix();
           controls.update();
         };
-        reset.current();
+        const segment = snapshot.live?.segment || snapshot.id;
+        if (displayedSegment.current !== segment) reset.current();
+        displayedSegment.current = segment;
         setLoading(false);
       } catch (e) {
         if (!disposed) {
@@ -241,23 +290,7 @@ export default function Viewer({
     return () => {
       disposed = true;
       abort.abort();
-      cancelAnimationFrame(frame);
-      resize.disconnect();
-      controls.dispose();
-      renderer.domElement.removeEventListener('pointerdown', down);
-      renderer.domElement.removeEventListener('pointerup', click);
-      world.traverse((o) => {
-        if (o instanceof THREE.Points || o instanceof THREE.LineSegments) {
-          o.geometry.dispose();
-          const mats = Array.isArray(o.material) ? o.material : [o.material];
-          mats.forEach((m) => m.dispose());
-        }
-      });
-      renderer.dispose();
-      renderer.domElement.remove();
-      objects.current = [];
     };
-    // Scene changes rebuild buffers; display changes below preserve the camera.
   }, [scene.id]);
   useEffect(() => {
     for (const points of objects.current) {
@@ -313,11 +346,13 @@ export default function Viewer({
         <ScanLine size={16} />
         {pickSource
           ? `Pick a point in source ${pickSource}`
-          : aligned
-            ? 'Registered scene'
-            : scene.reconstruction?.method === 'joint_vggt'
-              ? 'Joint reconstruction · shared coordinates'
-              : 'Independent coordinate frames'}
+          : scene.live
+            ? `Live batch ${scene.live.batch} · ${scene.live.continuity.status === 'accepted' ? 'continuous preview' : 'new segment'}`
+            : aligned
+              ? 'Registered scene'
+              : scene.reconstruction?.method === 'joint_vggt'
+                ? 'Joint reconstruction · shared coordinates'
+                : 'Independent coordinate frames'}
       </div>
       <div className="scene-controls">
         <Button
@@ -329,7 +364,10 @@ export default function Viewer({
         </Button>
       </div>
       {(loading || error) && (
-        <div className="empty-scene">
+        <div
+          className={objects.current.length ? 'canvas-label' : 'empty-scene'}
+          style={objects.current.length ? { top: 54 } : undefined}
+        >
           <p role={error ? 'alert' : 'status'}>
             {error || 'Loading scene geometry…'}
           </p>

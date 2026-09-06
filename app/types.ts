@@ -50,6 +50,13 @@ export type Scene = {
     elapsed_seconds: number;
     compute_device: string;
   };
+  live?: {
+    session_id: string;
+    batch: number;
+    segment: string;
+    elapsed_seconds: number;
+    continuity: { status: string; reason: string };
+  };
   landmarks?: { source_points: number[][]; target_points: number[][] };
 };
 export type State = {

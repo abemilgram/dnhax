@@ -10,6 +10,7 @@ export function isCombinedScene(scene) {
 
 /** @param {import('./types').Scene} scene */
 export function sceneLabel(scene) {
+  if (scene.live) return `Live batch ${scene.live.batch}`;
   return scene.sample
     ? 'Sample A + B'
     : scene.reconstruction?.method === 'joint_vggt'
