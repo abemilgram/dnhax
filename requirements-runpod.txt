@@ -1,0 +1,4 @@
+# Queue worker dependencies; the separate HTTP API has its own requirements.
+numpy>=1.26.4,<3
+Pillow==12.3.0
+runpod==1.12.0
