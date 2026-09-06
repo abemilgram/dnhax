@@ -1,0 +1,3 @@
+# Optional resident video detector. Pin from the verified isolated Runpod install.
+# Install alongside requirements.txt; retain the host's compatible PyTorch/CUDA build.
+ultralytics==8.4.142
