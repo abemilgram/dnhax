@@ -11,6 +11,7 @@ export function isCombinedScene(scene) {
 /** @param {import('./types').Scene} scene */
 export function sceneLabel(scene) {
   if (scene.live) return `Live batch ${scene.live.batch}`;
+  // Preserve labels for immutable scenes created before the AMB3R cutover.
   return scene.sample
     ? 'Sample A + B'
     : scene.reconstruction?.method?.startsWith('joint_')

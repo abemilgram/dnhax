@@ -1,4 +1,4 @@
-"""Download approved VGGT-Omega 1B-512 weights using local Hugging Face login."""
+"""Historical Omega checkpoint utility; the runtime no longer selects it."""
 
 import hashlib
 from pathlib import Path

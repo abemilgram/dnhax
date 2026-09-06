@@ -1,101 +1,40 @@
-"""Prepare persistent RunPod storage, download selected weights, and serve."""
+"""Prepare persistent AMB3R storage and serve, failing on any model error."""
 
-import hashlib
 import os
 from pathlib import Path
-import shutil
 import sys
 
-from huggingface_hub import hf_hub_download
-
 from backend.models import model_config
-
-
-MODEL_RELEASES = {
-    "vggt": {
-        "repository": "facebook/VGGT-1B",
-        "filename": "model.safetensors",
-        "revision": "860abec7937da0a4c03c41d3c269c366e82abdf9",
-        "sha256": None,
-    },
-    "vggt_omega": {
-        "repository": "facebook/VGGT-Omega",
-        "filename": "vggt_omega_1b_512.pt",
-        "revision": "55d1f4b2ce41fd0925887362a4a5049ce94e0be1",
-        "sha256": "c02da418b18bb01d0392598d3f6147366bcde1bb70fd08a5e3bf7925b0667934",
-    },
-}
-
-
-def verify(path: Path, expected: str | None) -> None:
-    if expected is None:
-        return
-    with path.open("rb") as checkpoint:
-        actual = hashlib.file_digest(checkpoint, "sha256").hexdigest()
-    if actual != expected:
-        path.unlink(missing_ok=True)
-        raise RuntimeError(f"Checkpoint checksum does not match: {path}")
 
 
 def ensure_checkpoint() -> None:
     config = model_config()
     target = config["checkpoint"]
-    if config["key"] == "amb3r":
-        from importlib.util import module_from_spec, spec_from_file_location
+    from importlib.util import module_from_spec, spec_from_file_location
 
-        spec = spec_from_file_location(
-            "download_amb3r", Path(__file__).with_name("download_amb3r.py")
-        )
-        downloader = module_from_spec(spec)
-        spec.loader.exec_module(downloader)
-        download, validate = downloader.download, downloader.validate
-
-        if target.is_file():
-            validate(target)
-            print(f"Using checkpoint {target}", flush=True)
-            return
-        if os.environ.get("SIMV1_DOWNLOAD_MODEL", "1") != "1":
-            raise RuntimeError(
-                f"Missing checkpoint and download is disabled: {target}"
-            )
-        print(
-            f"Downloading {config['model']} to persistent storage at {target}",
-            flush=True,
-        )
-        download(target)
-        return
-
-    release = MODEL_RELEASES[config["key"]]
+    spec = spec_from_file_location(
+        "download_amb3r", Path(__file__).with_name("download_amb3r.py")
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Could not load the AMB3R checkpoint downloader.")
+    downloader = module_from_spec(spec)
+    spec.loader.exec_module(downloader)
     if target.is_file():
-        verify(target, release["sha256"])
+        downloader.validate(target)
         print(f"Using checkpoint {target}", flush=True)
         return
     if os.environ.get("SIMV1_DOWNLOAD_MODEL", "1") != "1":
         raise RuntimeError(f"Missing checkpoint and download is disabled: {target}")
-
-    target.parent.mkdir(parents=True, exist_ok=True)
     print(
         f"Downloading {config['model']} to persistent storage at {target}",
         flush=True,
     )
-    downloaded = Path(
-        hf_hub_download(
-            repo_id=release["repository"],
-            filename=release["filename"],
-            revision=release["revision"],
-            local_dir=target.parent,
-        )
-    )
-    if downloaded.resolve() != target.resolve():
-        temporary = target.with_name(f".{target.name}.download")
-        shutil.copyfile(downloaded, temporary)
-        temporary.replace(target)
-    verify(target, release["sha256"])
+    downloader.download(target)
 
 
 def verify_cuda() -> None:
     if os.environ.get("SIMV1_DEVICE", "cuda") != "cuda":
-        return
+        raise RuntimeError("The AMB3R image requires SIMV1_DEVICE=cuda.")
     import torch
 
     if not torch.cuda.is_available():

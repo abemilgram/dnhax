@@ -1,2 +1,2 @@
-# Public VGGT implementation pinned for reproducible CUDA and Apple MPS installs.
+# Historical pre-cutover environment only; not a selectable reconstruction backend.
 vggt @ https://github.com/facebookresearch/vggt/archive/a288dd0f14786c93483e45524328726ab7b1b4ce.tar.gz

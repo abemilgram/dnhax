@@ -1,2 +1,2 @@
-# Optional approved VGGT-Omega model; compatible alongside the public VGGT package.
+# Historical pre-cutover environment only; not a selectable reconstruction backend.
 vggt-omega @ https://github.com/facebookresearch/vggt-omega/archive/282ec70363edeff59424bf43731658092fba3d37.tar.gz

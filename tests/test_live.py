@@ -20,7 +20,7 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(
         live_api.shutil, "disk_usage", lambda path: SimpleNamespace(free=20 * 1024**3)
     )
-    monkeypatch.setenv("SIMV1_MODEL", "vggt")
+    monkeypatch.setenv("SIMV1_MODEL", "amb3r")
     client = TestClient(app)
     session = client.post(
         "/api/live/sessions", json={"request_key": "test-session"}
@@ -41,7 +41,8 @@ def fake_prediction(images, *args):
     ex = np.tile(np.eye(4)[:3], (n, 1, 1))
     ex[:, 0, 3] = np.arange(n) * 0.1
     return {
-        "model": "fixture-model",
+        "model": "AMB3R-SfM",
+        "model_key": "amb3r",
         "model_variant": "test",
         "depth": np.ones((n, 32, 32)),
         "confidence": np.ones((n, 32, 32)),

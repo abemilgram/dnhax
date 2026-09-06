@@ -251,6 +251,8 @@ def process(job):
                 (json.dumps(frames), batch["id"]),
             )
         prediction = infer_images([Path(f["path"]) for f in frames], device, progress)
+    if prediction.get("model_key") != "amb3r":
+        raise RuntimeError("AMB3R inference returned an unexpected model identity.")
     scene_id = store.uid()
     folder = store.ROOT / "scenes" / scene_id
     folder.mkdir(parents=True)
@@ -306,11 +308,7 @@ def process(job):
                 indices,
                 device,
                 point_limit=200000,
-                reconstruction_method=(
-                    "live_amb3r"
-                    if prediction.get("model_key") == "amb3r"
-                    else "live_vggt"
-                ),
+                reconstruction_method="live_amb3r",
             )
         )
     manifest = {

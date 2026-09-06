@@ -513,7 +513,7 @@ export default function ReconstructionWorkspace() {
                         ) : diagnostics ? (
                           'Provisional'
                         ) : jointReconstruction ? (
-                          'Joint VGGT prediction'
+                          'Joint AMB3R prediction'
                         ) : (
                           'Awaiting landmarks'
                         )}

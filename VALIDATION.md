@@ -1,5 +1,9 @@
 # Validation — 2026-09-05
 
+This file records historical pre-cutover validation. Its VGGT, VGGT-Omega,
+MPS, and CPU inference results do not describe a selectable current runtime.
+Video-to-3D is now AMB3R-only and CUDA-only; current failures are explicit.
+
 - Backend tests: 11 passed (including dense export color correspondence and depth-edge filtering).
 - Python undefined/unused-name checks: passed.
 - TypeScript type check: passed.

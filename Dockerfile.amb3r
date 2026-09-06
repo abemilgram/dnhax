@@ -42,11 +42,9 @@ WORKDIR /app
 
 RUN python -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
 
-COPY requirements.txt requirements-vggt.txt requirements-vggt-omega.txt requirements-amb3r.txt ./
+COPY requirements.txt requirements-amb3r.txt ./
 RUN python -m pip install \
         -r requirements.txt \
-        -r requirements-vggt.txt \
-        -r requirements-vggt-omega.txt \
         -r requirements-amb3r.txt
 
 RUN python -m pip install \

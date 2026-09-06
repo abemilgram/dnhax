@@ -1,4 +1,4 @@
-"""Download the public VGGT-1B checkpoint to the app's ignored model directory."""
+"""Historical VGGT checkpoint utility; the runtime no longer selects VGGT."""
 
 from pathlib import Path
 

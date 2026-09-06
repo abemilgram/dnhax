@@ -33,7 +33,7 @@ def test_joint_rejects_missing_repeated_and_swapped_sources(captures):
     assert store.claim() is None
 
 
-def test_joint_uses_one_sequence_and_preserves_shared_camera_coordinates(captures, monkeypatch):
+def test_joint_uses_amb3r_sequence_and_preserves_shared_camera_coordinates(captures, monkeypatch):
     client, payload = captures
     monkeypatch.setenv('SIMV1_JOINT_FRAMES_PER_SOURCE', '2')
     monkeypatch.setattr(joint, 'compute_device', lambda: 'cpu')
@@ -48,7 +48,7 @@ def test_joint_uses_one_sequence_and_preserves_shared_camera_coordinates(capture
         n = len(images)
         ex = np.tile(np.eye(4)[:3], (n, 1, 1))
         ex[:, 0, 3] = np.arange(n) * 10
-        return {'model': 'facebook/VGGT-Omega', 'model_variant': '1B-512',
+        return {'model': 'AMB3R-SfM', 'model_key': 'amb3r', 'model_variant': '92c4081',
                 'depth': np.ones((n, 8, 8)), 'confidence': np.ones((n, 8, 8)),
                 'extrinsics': ex, 'intrinsics': np.tile(np.eye(3), (n, 1, 1)),
                 'rgb': np.tile(np.arange(n)[:, None, None, None] / 4, (1, 3, 8, 8))}
@@ -59,8 +59,8 @@ def test_joint_uses_one_sequence_and_preserves_shared_camera_coordinates(capture
     scene = state['scenes'][0]
     assert len(calls) == 1 and len(calls[0]) == 4
     assert [p.parts[-3] for p in calls[0]] == ['A', 'A', 'B', 'B']
-    assert scene['reconstruction']['method'] == 'joint_vggt'
-    assert scene['reconstruction']['model'] == 'facebook/VGGT-Omega'
+    assert scene['reconstruction']['method'] == 'joint_amb3r'
+    assert scene['reconstruction']['model'] == 'AMB3R-SfM'
     assert scene['diagnostics'] is None
     assert scene['reconstruction']['overlap_verified'] is False
     assert state['jobs'][0]['status'] == 'completed'
@@ -69,7 +69,7 @@ def test_joint_uses_one_sequence_and_preserves_shared_camera_coordinates(capture
     assert a['capture_id'] == payload['capture_a'] and b['capture_id'] == payload['capture_b']
     assert b['cameras'][0]['world_to_camera'][0][3] == 20
     for c in (a, b):
-        assert c['model'] == 'facebook/VGGT-Omega'
+        assert c['model'] == 'AMB3R-SfM'
         np.testing.assert_array_equal(c['transform'], np.eye(4))
         assert len(client.get(c['colors']).content) == c['count'] * 3
     xyz_a = np.frombuffer(client.get(a['points']).content, dtype='<f4').reshape(-1, 3)
@@ -154,7 +154,7 @@ def test_unlimited_joint_keeps_every_candidate_in_time_order(tmp_path, monkeypat
     monkeypatch.setattr(joint, 'sample_candidates', candidates)
     def predict(images, device, progress):
         n = len(images)
-        return {'model': 'facebook/VGGT-1B', 'model_variant': '1B',
+        return {'model': 'AMB3R-SfM', 'model_key': 'amb3r', 'model_variant': '92c4081',
                 'depth': np.ones((n, 4, 4)), 'confidence': np.ones((n, 4, 4)),
                 'extrinsics': np.tile(np.eye(4)[:3], (n, 1, 1)),
                 'intrinsics': np.tile(np.eye(3), (n, 1, 1)),

@@ -72,7 +72,8 @@ def test_amb3r_export_rejects_fully_unmapped_source(tmp_path, monkeypatch):
         )
 
 
-def test_vggt_export_still_unprojects_depth(tmp_path, monkeypatch):
+def test_legacy_depth_artifact_export_still_unprojects_depth(tmp_path, monkeypatch):
+    """Keep old depth-based scene artifacts readable after the runtime cutover."""
     monkeypatch.setattr(store, "ROOT", tmp_path)
     path = tmp_path / "frame.jpg"
     path.touch()
@@ -116,9 +117,27 @@ def test_amb3r_pose_inverse_is_world_to_camera():
     assert extrinsics[1, 0, 3] == pytest.approx(-4)
 
 
-def test_amb3r_runtime_rejects_non_cuda():
+@pytest.mark.parametrize("device", ["cpu", "mps"])
+def test_amb3r_runtime_rejects_non_cuda(device):
     with pytest.raises(RuntimeError, match="AMB3R requires CUDA"):
-        Amb3rRuntime().load({"checkpoint": None, "model": "AMB3R-SfM"}, "cpu", lambda stage: None)
+        Amb3rRuntime().load(
+            {"checkpoint": None, "model": "AMB3R-SfM"},
+            device,
+            lambda stage: None,
+        )
+
+
+def test_amb3r_runtime_rejects_missing_checkpoint(tmp_path):
+    with pytest.raises(RuntimeError, match="Missing AMB3R-SfM checkpoint"):
+        Amb3rRuntime().load(
+            {
+                "checkpoint": tmp_path / "missing.pt",
+                "model": "AMB3R-SfM",
+                "download": "scripts/download_amb3r.py",
+            },
+            "cuda",
+            lambda stage: None,
+        )
 
 
 def test_ping_is_available_for_amb3r_image_health_checks():

@@ -1,8 +1,8 @@
 # dnhax — simv1 civilian room reconstruction
 
-**macos branch:** Apple Silicon setup and validation limits are in [MACOS.md](MACOS.md). CUDA remains supported.
+**Reconstruction cutover:** video-to-3D is AMB3R-only, CUDA-only, and fail-loud. Apple Silicon limits are in [MACOS.md](MACOS.md).
 
-A local three-device demo for submitted room captures. Two browsers upload independent walkthroughs to a CUDA or Apple Silicon processing computer. A GPU worker reconstructs each capture; the viewer supports manual landmark registration, validation, and inspection of the combined point clouds.
+A local three-device demo for submitted room captures. Two browsers upload independent walkthroughs to an NVIDIA CUDA processing computer. AMB3R reconstructs each capture; the viewer supports manual landmark registration, validation, and inspection of the combined point clouds.
 
 For a containerized CUDA deployment on RunPod, see [RUNPOD.md](RUNPOD.md).
 
@@ -26,6 +26,7 @@ or capture components in Tactical Brain mode.
 
 ## What works without CUDA
 
+- The Tactical Brain golden replay and its UI/API.
 - Capture upload (MP4/MOV/WebM/MKV, up to 512 MB).
 - Optional browser screen/window/tab recording; nothing uploads before Submit.
 - SQLite-backed processing queue, worker heartbeat, explicit job errors.
@@ -34,6 +35,11 @@ or capture components in Tactical Brain mode.
 - Point picking for paired landmarks, or JSON landmark import.
 - Robust positive-scale similarity registration and held-out validation.
 - Immutable scene versions, binary PLY export, transform/provenance manifests.
+
+Sample, tactical, queue, and registration operations do not require AMB3R. Any
+video-to-3D reconstruction without CUDA, the AMB3R source, dependencies, and
+checkpoint fails explicitly; it never substitutes VGGT, VGGT-Omega, CPU, MPS,
+or sample geometry.
 
 ## Deployment on the compute laptop
 
@@ -50,7 +56,7 @@ npm run build
 .\.venv\Scripts\python.exe scripts\serve.py
 ```
 
-macOS/Linux (sample and registration also run on CPU; see MACOS.md for Apple GPU inference):
+macOS/Linux (UI, tactical replay, sample, queue, and registration only):
 
 ```sh
 cd /path/to/simv1
@@ -77,11 +83,11 @@ python scripts/serve.py --cert /path/to/cert.pem --key /path/to/key.pem
 
 Open the corresponding `https://` address. Do not copy a CA private key to the clients. Click **Record screen** and select a screen, window, or tab in the browser picker. Stopping sharing finalizes the clip, just like the app’s Stop recording button. Screen capture availability depends on the browser; if the embedded browser does not support it, open the URL in Chrome or Edge. Recording is explicitly user-initiated and is never a background continuous upload.
 
-## AMB3R reconstruction on RunPod
+## AMB3R-only reconstruction on RunPod
 
-The `AMB3R` branch uses the full AMB3R model and its unordered SfM pipeline on
-CUDA. Use the pinned [RunPod image setup](RUNPOD.md); this is not a macOS
-backend. Frames from A and B enter one image pool, while simv1 retains the
+The reconstruction runtime accepts only `SIMV1_MODEL=amb3r` and uses the full
+AMB3R model and its unordered SfM pipeline on CUDA. Use the pinned
+[RunPod image setup](RUNPOD.md); this is not a macOS backend. Frames from A and B enter one image pool, while simv1 retains the
 input-index manifest needed to split the resulting shared world points back
 into their sources. AMB3R-SfM requires a connected visual-overlap graph and
 does not natively model camera IDs, synchronization, dynamic objects, or
@@ -92,17 +98,18 @@ head does not metric-scale the SfM world points or camera translations. The
 upstream source and checkpoint also lack a stated license, so this integration
 is an evaluation build until those rights are clarified.
 
-## Optional VGGT reconstruction
+`Dockerfile.amb3r` is the supported reconstruction image. It installs the
+pinned AMB3R stack and starts only after validating CUDA and provisioning the
+checkpoint. A manually provisioned host must provide the same dependencies,
+`AMB3R_ROOT`, and `AMB3R_CHECKPOINT`.
 
-Approved **VGGT-Omega 1B-512** is also supported for single and joint A+B reconstruction on MPS/CUDA. See [the Omega setup instructions](MACOS.md#approved-vggt-omega-weights). Install `requirements-vggt-omega.txt` and the approved checkpoint. Auto model selection prefers installed Omega weights; set `SIMV1_MODEL=vggt` to keep public VGGT. Results record the actual model and preserve older scenes.
+The default `Dockerfile` intentionally remains the lightweight queue worker.
+Its sample, pair, and registration operations work without AMB3R; the separate
+Tactical Brain golden replay likewise needs no model. Submitting `reconstruct`
+or `joint` to the default queue image fails loudly unless CUDA and the AMB3R
+dependencies/checkpoint were separately provisioned.
 
-The sample path is independent of the model. No model weights are bundled or downloaded automatically.
-
-1. For NVIDIA CUDA, install the matching PyTorch build using the [official PyTorch installer](https://pytorch.org/get-started/locally/) in the worker's Python environment. For Apple MPS, follow [MACOS.md](MACOS.md).
-2. Install the pinned public [VGGT implementation](https://github.com/facebookresearch/vggt): `python -m pip install -r requirements-vggt.txt`.
-3. Download the public `facebook/VGGT-1B` weights: `python scripts/download_vggt.py`. The checkpoint uses the CC-BY-NC-4.0 license.
-4. Optionally set `VGGT_CHECKPOINT` to another compatible `.safetensors` or `.pt` checkpoint path. Otherwise the downloader's `models/vggt-1b/model.safetensors` path is used.
-5. Verify CUDA:
+Verify CUDA:
 
 ```sh
 python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
@@ -114,9 +121,12 @@ PowerShell launch example:
 .\.venv\Scripts\python.exe scripts\serve.py
 ```
 
-Single-capture reconstruction extracts a bounded number of frames at 1 fps (defaults: CUDA 24, MPS 8, CPU 2) from the beginning of the submitted clip. Joint A+B reconstruction selects frames across both full clips as described below. Both paths confidence-filter geometry and export at most 1,000,000 displayed points per source. Depth, confidence, and predicted camera matrices are preserved alongside the clouds. Video timestamps are approximate frame-sampling timestamps.
+Single-capture reconstruction extracts frames at 1 fps, optionally capped by `SIMV1_MAX_FRAMES`. Joint A+B reconstruction selects frames across both full clips as described below. Both paths confidence-filter geometry and export at most 1,000,000 displayed points per source. Geometry, confidence, and predicted camera matrices are preserved alongside the clouds. Video timestamps are approximate frame-sampling timestamps.
 
-The adapter follows the official model API. Memory use, geometry quality, and latency depend on the selected device and clip. A missing model, missing checkpoint, explicitly requested unavailable device, or failed decode produces an explicit failed job and never a sample reconstruction. The app does not promise live processing performance.
+Memory use, geometry quality, and latency depend on the CUDA GPU and clip. A
+non-AMB3R selector, missing dependency/checkpoint, non-CUDA device, load or
+inference error, or failed decode produces an explicit failed job. There is no
+model or sample fallback. The app does not promise live processing performance.
 
 ## Demo walkthrough
 
@@ -124,7 +134,7 @@ The adapter follows the official model API. Memory use, geometry quality, and la
 2. In **Alignment**, toggle Apply alignment to inspect independent frames versus registered geometry. Diagnostics are computed from the fixture's known correspondence pairs, not measured video performance.
 3. In **Explore**, isolate each source, change point size, and download original PLYs and the scene manifest.
 4. For real captures, submit one room clip to A and one to B. Both clips need recognizable shared content.
-5. Click **Reconstruct A + B together**. The selected model processes keyframes from both videos together and exports a **Joint A + B** scene with separate source labels in shared coordinates. You do not need to reconstruct the captures separately first.
+5. Click **Reconstruct A + B together**. AMB3R processes keyframes from both videos together and exports a **Joint A + B** scene with separate source labels in shared coordinates. You do not need to reconstruct the captures separately first.
 6. In **Explore**, toggle A/B or enable source colors to inspect overlap. Joint predictions are not independently validated alignment measurements. If shared features are scarce, the scene displays a warning.
 7. For an optional manual correction, open **Optional landmark correction**, click **Pick pairs**, and select the same landmark in A then B for at least eight distributed pairs. Click **Fit and validate** to publish a new version. The manual correction remains a separate RANSAC similarity fit; the joint pipeline does not use RANSAC.
 
@@ -153,8 +163,8 @@ backend/joint.py      Joint A+B keyframe selection and reconstruction
 backend/geometry.py   Similarity fitting, RANSAC, PLY output
 backend/store.py      SQLite metadata and immutable publication
 scripts/serve.py      Local LAN launcher and process cleanup
-scripts/download_vggt.py Public pinned checkpoint downloader
 scripts/download_amb3r.py Official AMB3R checkpoint downloader
+scripts/download_vggt*.py Historical download utilities; not runtime-selectable
 dist/client/          Built static frontend (generated)
 data/                 Local captures and artifacts (ignored)
 tests/                Backend integration and geometry checks

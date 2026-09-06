@@ -54,6 +54,7 @@ export type Scene = {
   scale_source: string;
   provenance: string;
   reconstruction?: {
+    // joint_vggt remains readable for scenes published before the AMB3R cutover.
     method: 'joint_vggt' | 'joint_amb3r';
     model?: string;
     model_variant?: string;

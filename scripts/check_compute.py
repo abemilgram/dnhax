@@ -20,6 +20,10 @@ def main():
         report["torch"] = torch.__version__
         device = select_device(torch)
         report.update(device=device, max_frames=frame_limit(device))
+        if device != "cuda":
+            raise RuntimeError(
+                "AMB3R reconstruction requires CUDA; CPU and MPS are unsupported."
+            )
         sample = torch.ones((16, 16), device=device)
         result = (sample @ sample).cpu()
         assert result[0, 0].item() == 16
@@ -29,19 +33,14 @@ def main():
         config = model_config()
         report["model"] = config["model"]
         report["model_variant"] = config["variant"]
-        if config["key"] == "amb3r":
-            amb3r_root = Path(os.environ.get("AMB3R_ROOT", "/opt/amb3r"))
-            report["backend_installed"] = (
-                (amb3r_root / "amb3r/model.py").is_file()
-                and all(
-                    importlib.util.find_spec(module) is not None
-                    for module in ("spconv", "torch_scatter", "pytorch3d")
-                )
+        amb3r_root = Path(os.environ.get("AMB3R_ROOT", "/opt/amb3r"))
+        report["backend_installed"] = (
+            (amb3r_root / "amb3r/model.py").is_file()
+            and all(
+                importlib.util.find_spec(module) is not None
+                for module in ("spconv", "torch_scatter", "pytorch3d")
             )
-        else:
-            report["backend_installed"] = (
-                importlib.util.find_spec(config["key"]) is not None
-            )
+        )
         checkpoint = config["checkpoint"]
         report["checkpoint"] = str(checkpoint)
         report["checkpoint_present"] = checkpoint.is_file()

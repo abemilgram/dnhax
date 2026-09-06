@@ -2,7 +2,7 @@
 
 ## Queue worker
 
-Deploy branch `macoslive`, Dockerfile `Dockerfile`, endpoint type Queue.
+Build `Dockerfile` and deploy it as endpoint type Queue.
 The container starts `handler.py`, which registers the Runpod handler.
 Smoke-test input: `{"input":{"kind":"sample"}}`.
 
@@ -11,9 +11,12 @@ ID and newly published scene manifests. Supported kinds are `sample`,
 `reconstruct`, `joint`, `pair`, and `register`; `payload` uses the same fields as
 the local processor. Invalid input or processing failures fail the Runpod job.
 
-This image supports sample geometry and registration. Real reconstruction also
-requires installing CUDA PyTorch, the selected model requirements, and the
-checkpoint as described in README.md. Model weights are not bundled.
+This lightweight image supports sample, pair, and registration work; Tactical
+Brain's separate golden replay also needs no reconstruction model. The queue
+image does not contain AMB3R. A `reconstruct` or `joint` request therefore
+fails explicitly unless CUDA and the complete AMB3R source, dependencies, and
+checkpoint were separately provisioned. Use `Dockerfile.amb3r` for video-to-3D;
+no other model is selected as a fallback.
 
 The existing application is a local SQLite/filesystem workspace. Capture and
 scene IDs must already exist in the worker's SIMV1_DATA directory; submitting an
@@ -33,8 +36,8 @@ GPU worker in one pod. Captures are uploaded to the pod, AMB3R creates the
 point clouds there, and browser clients fetch the resulting artifacts. This
 branch runs the full AMB3R model through its unordered AMB3R-SfM pipeline.
 
-Do not point the existing macoslive VGGT RunPod endpoint at this branch.
-Build a separate image and pod when you want to evaluate AMB3R.
+Do not use the lightweight queue image for reconstruction. Build a separate
+AMB3R image and GPU pod.
 
 ## Build and publish
 
@@ -80,16 +83,9 @@ reuse it. Set `SIMV1_DOWNLOAD_MODEL=0` to require a pre-provisioned checkpoint.
 Google Drive is not a production-grade model registry; mirror the checkpoint
 and pin its SHA-256 before relying on unattended production starts.
 
-For approved VGGT-Omega weights, configure:
-
-```env
-SIMV1_MODEL=vggt_omega
-VGGT_OMEGA_CHECKPOINT=/workspace/models/vggt-omega/vggt_omega_1b_512.pt
-HF_TOKEN=your-read-token
-```
-
-Omega access must already be approved on Hugging Face. Store `HF_TOKEN` as a
-RunPod secret rather than in the image or repository.
+Any `SIMV1_MODEL` value other than `amb3r` is rejected. Missing source,
+dependencies, checkpoint, CUDA, or inference failures terminate the
+reconstruction job explicitly.
 
 The worker removes completed submitted-capture data older than
 `SIMV1_RETENTION_HOURS`. Set it to `0` to disable scheduled cleanup. The

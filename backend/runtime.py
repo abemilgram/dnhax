@@ -67,38 +67,3 @@ def release_memory(torch, device):
         torch.cuda.empty_cache()
     elif device == "mps":
         torch.mps.empty_cache()
-
-
-def predict_geometry(model, images, device, model_key="vggt"):
-    """Use upstream CUDA forward unchanged; dispatch VGGT heads without CUDA on Mac.
-
-    Targets the official revisions pinned in requirements-vggt*.txt.
-    Omega uses its dense head and direct camera encoding; public VGGT uses
-    its depth head and the last iterative camera prediction.
-    MPS/CPU use float32 throughout rather than CUDA-specific mixed precision.
-    No global Torch patches or edits to the installed upstream package.
-    """
-    if device == "cuda":
-        return model(images)
-    batch = images.unsqueeze(0) if images.ndim == 4 else images
-    if model.training:
-        raise ValueError("Reconstruction requires model.eval().")
-    features, patch_start_idx = model.aggregator(batch)
-    if not features or features[-1] is None:
-        raise RuntimeError("VGGT returned no final features; check the installed revision.")
-    result = {"images": batch}
-    if model_key == "vggt_omega":
-        if model.camera_head is None or model.dense_head is None:
-            raise RuntimeError("Omega requires camera and depth heads.")
-        result["pose_enc"] = model.camera_head(features, patch_token_start=patch_start_idx)
-        result["depth"], result["depth_conf"] = model.dense_head(
-            features, images=batch, patch_token_start=patch_start_idx
-        )
-        return result
-    if model.camera_head is None or model.depth_head is None:
-        raise RuntimeError("The checkpoint must enable camera and depth heads.")
-    result["pose_enc"] = model.camera_head(features)[-1]
-    result["depth"], result["depth_conf"] = model.depth_head(
-        features, images=batch, patch_start_idx=patch_start_idx
-    )
-    return result

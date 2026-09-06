@@ -1,6 +1,8 @@
 # Live batch processing build spec
 
-Status: proposed implementation specification; no runtime changes made.
+Status: historical implementation specification. The shipped runtime is now
+AMB3R-only and CUDA-only; model/device alternatives described by older
+validation records are not selectable.
 Target: `/Users/jeffdai/Downloads/simv1`.
 
 ## Outcome and scope
@@ -9,7 +11,7 @@ Two capture browsers continuously send sampled room images to the existing compu
 
 “Live” means continuous ingestion with periodic reconstruction updates. It does not establish a video-rate reconstruction guarantee. The first release shows the current reconstruction window; persistent whole-room accumulation is a separate milestone because it needs stronger drift correction and fusion.
 
-Keep the existing React/Three.js frontend, FastAPI service, SQLite metadata, local artifact storage, and CUDA/MPS adapters. Preserve submitted-video processing, sample scenes, exports, and manual landmark correction. One active live session, A/B sources, one GPU worker, and a mostly static room are the initial operating envelope. The API and worker remain on the compute laptop, using the existing trusted LAN HTTPS deployment.
+Keep the existing React/Three.js frontend, FastAPI service, SQLite metadata, local artifact storage, and AMB3R CUDA adapter. Preserve submitted-video processing, sample scenes, exports, and manual landmark correction. One active live session, A/B sources, one GPU worker, and a mostly static room are the initial operating envelope. The API and worker remain on the compute host, using the existing trusted LAN HTTPS deployment.
 
 ## What the repository already provides
 
@@ -24,11 +26,14 @@ Keep the existing React/Three.js frontend, FastAPI service, SQLite metadata, loc
 | `app/page.tsx` | Polls full state every 2.5 seconds | Compact live state plus explicit Follow live / inspect history behavior |
 | `app/viewer.tsx` | Recreates renderer and resets camera on `scene.id` change | Persistent renderer with atomic geometry replacement |
 
-`VALIDATION.md` reports a 54.97-second joint run on Apple M4 Pro/MPS using eight frames, including selection, model loading, inference and export. That is a historical end-to-end measurement, not a warm-inference benchmark or a guarantee for Omega. The spec therefore begins with profiling and treats timing settings below as provisional.
+`VALIDATION.md` contains pre-cutover measurements from removed runtime backends.
+They are historical evidence only and do not establish current AMB3R
+performance. This spec therefore begins with profiling and treats timing
+settings below as provisional.
 
 ## User flow
 
-1. The compute browser creates a live session and shows A/B connection status, selected model/device and worker readiness.
+1. The compute browser creates a live session and shows A/B connection status, pinned AMB3R/CUDA configuration and worker readiness.
 2. Each capture browser joins A or B and clicks Start camera or Start screen. This click obtains browser media permission; joining a session never starts recording automatically.
 3. Each source shows its local preview, sampled/sent/skipped counts, connection state and last acknowledged frame. Live mode clearly says that images upload while capture is active.
 4. Once enough varied frames arrive, the worker publishes a first preview. Additional frames continue arriving during inference.
@@ -46,7 +51,7 @@ A / B media streams
   -> bounded upload queues and idempotent HTTP ingestion
   -> durable per-source frame rings
   -> worker snapshots a bounded overlapping image sequence
-  -> resident VGGT / VGGT-Omega inference
+  -> resident AMB3R inference on CUDA
   -> continuity check + bounded preview export
   -> immutable scene publication + atomic latest-scene pointer
   -> viewer preloads buffers and swaps the completed scene
@@ -86,7 +91,7 @@ Live work and existing submitted jobs share the worker. A running job is not pre
 
 ## Resident model runtime and failure behavior
 
-Introduce a worker-owned `ModelRuntime` with load, infer and unload methods. Cache exactly one model keyed by model variant, checkpoint digest, device and precision. Release per-batch inputs/predictions after export; retain weights across batches. Keep the existing public-model and Omega dispatch behavior. Persist the actual preprocessing policy and precision in every batch manifest.
+Introduce a worker-owned `ModelRuntime` with load, infer and unload methods. Cache exactly one AMB3R model keyed by model variant, checkpoint digest, CUDA device and precision. Release per-batch inputs/predictions after export; retain weights across batches. Persist the actual preprocessing policy and precision in every batch manifest. Configuration, dependency, checkpoint, load, and inference errors fail explicitly without another model or device.
 
 Pin model/checkpoint settings for a live session. Configuration changes start a new session. Existing submitted jobs may cause a cache change at job boundaries, with the load delay reported. All inference stays inside the worker; API handlers never load the model.
 
@@ -96,7 +101,7 @@ Worker restarts leave the prior scene visible. Recover interrupted batches as re
 
 ## Geometry across batches
 
-All A/B frames in one window continue to enter one sequence, as the current joint adapter does. Never concatenate independently predicted windows with identity transforms and call that a stable map. The current adapter offers per-call joint predictions, not persistent mapping state; the upstream [VGGT implementation](https://github.com/facebookresearch/vggt) is the reference for its image-sequence API.
+All A/B frames in one window continue to enter one sequence, as the current joint adapter does. Never concatenate independently predicted windows with identity transforms and call that a stable map. The current AMB3R adapter offers per-call joint predictions, not persistent mapping state.
 
 For continuity, use identical retained frame IDs and matching preprocessed pixel coordinates to obtain 3D correspondences between successive predictions. Fit a positive-scale similarity transform from the new window into the previous accepted scene frame. Use confidence/depth-edge filtering, spatially distributed sampling, robust fitting and a held-out subset. Evaluate each shared frame, spatial support, scale change, inlier ratio and normalized held-out residual. Keep continuity diagnostics distinct from the existing manual A/B registration diagnostics.
 

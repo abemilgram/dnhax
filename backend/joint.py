@@ -130,11 +130,9 @@ def reconstruct_joint(captures, folder, progress):
     paths = [frame["path"] for frames in selected for frame in frames]
     # All A and B frames occupy the same sequence dimension, not separate batches.
     prediction = infer_images(paths, device, progress)
-    method = (
-        "joint_amb3r"
-        if prediction.get("model_key") == "amb3r"
-        else "joint_vggt"
-    )
+    if prediction.get("model_key") != "amb3r":
+        raise RuntimeError("AMB3R inference returned an unexpected model identity.")
+    method = "joint_amb3r"
     clouds, offset = [], 0
     for capture, frames in zip(captures, selected):
         progress(f"Exporting source {capture['source']} in shared coordinates")

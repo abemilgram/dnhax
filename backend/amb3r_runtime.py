@@ -59,9 +59,7 @@ class Amb3rRuntime:
 
     def load(self, config, device, progress):
         if device != "cuda":
-            raise RuntimeError(
-                "AMB3R requires CUDA. Set SIMV1_MODEL=vggt for macOS or CPU use."
-            )
+            raise RuntimeError("AMB3R requires CUDA; CPU and MPS are unsupported.")
         checkpoint = config["checkpoint"]
         if not checkpoint.is_file():
             raise RuntimeError(

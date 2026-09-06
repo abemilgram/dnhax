@@ -14,10 +14,14 @@ def compute_device():
     try:
         import torch
     except ImportError as exc:
+        raise RuntimeError("Install the AMB3R CUDA dependencies. See RUNPOD.md.") from exc
+    device = select_device(torch)
+    if device != "cuda":
         raise RuntimeError(
-            "Install PyTorch and VGGT. See MACOS.md or README.md."
-        ) from exc
-    return select_device(torch)
+            "AMB3R reconstruction requires CUDA; CPU and MPS are unsupported. "
+            "Use Dockerfile.amb3r on an NVIDIA GPU."
+        )
+    return device
 
 
 def infer_images(images, device, progress):
