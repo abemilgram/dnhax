@@ -19,6 +19,7 @@ import {
   FlaskConical,
   CheckCircle2,
   Link2,
+  Trash2,
 } from 'lucide-react';
 import Viewer from './viewer';
 import Capture from './capture';
@@ -120,6 +121,7 @@ export default function Home() {
   }, [refresh]);
   const scene =
     liveScene || state.scenes.find((s) => s.id === sceneId) || state.scenes[0];
+  const isLiveScene = !!scene?.live;
   const combinedScene = state.scenes.find(
     (s) => !s.sample && isCombinedScene(s),
   );
@@ -129,12 +131,12 @@ export default function Home() {
     ['queued', 'running'].includes(j.status),
   );
   useEffect(() => {
-    if (!scene?.live) setVisible({ A: true, B: true });
+    if (!isLiveScene) setVisible({ A: true, B: true });
     setPickSource(undefined);
     pendingTarget.current = null;
     setPairs({ source_points: [], target_points: [] });
     setLandmarks('');
-  }, [scene?.id]);
+  }, [scene?.id, isLiveScene]);
   async function act(path: string, body: unknown = {}) {
     setBusy(true);
     setError('');
@@ -296,6 +298,9 @@ export default function Home() {
                 }}
                 onReconstruct={(capture_id) =>
                   void act('reconstruct', { capture_id })
+                }
+                onDelete={(capture_id) =>
+                  void act(`captures/${capture_id}/delete`)
                 }
               />
             ))}
@@ -733,6 +738,35 @@ export default function Home() {
             No jobs yet. Submit a capture or load the sample.
           </p>
         )}
+      </section>
+      <section className="sample-bar">
+        <div>
+          <strong>Iteration storage</strong>
+          <p>
+            Remove stale captures and scenes, or clear the complete workspace.
+            Model weights on the RunPod volume are retained.
+          </p>
+        </div>
+        <div className="toolbar">
+          <Button
+            variant="outline"
+            disabled={busy || active}
+            onClick={() => void act('cleanup', { hours: 24 })}
+          >
+            Delete data older than 24h
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={busy || active}
+            onClick={() => {
+              setLiveScene(null);
+              setSceneId('');
+              void act('reset');
+            }}
+          >
+            <Trash2 /> Reset complete workspace
+          </Button>
+        </div>
       </section>
       <footer>
         Live batches and submitted captures · reconstruction in arbitrary units

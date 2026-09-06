@@ -81,6 +81,29 @@ async def upload(source: Literal["A", "B"] = Form(...), file: UploadFile = File(
     return {"id": identity, "source": source}
 
 
+@app.post("/api/captures/{identity}/delete")
+def delete_capture(identity: str):
+    result = store.delete_capture(identity)
+    if result is None:
+        raise HTTPException(404, "Capture not found.")
+    return result
+
+
+class CleanupRequest(BaseModel):
+    hours: float = Field(default=24, gt=0, le=8760, allow_inf_nan=False)
+
+
+@app.post("/api/cleanup")
+def cleanup(request: CleanupRequest):
+    return store.cleanup_old(request.hours)
+
+
+@app.post("/api/reset")
+def reset():
+    store.reset_workspace()
+    return {"reset": True}
+
+
 class CaptureJob(BaseModel):
     capture_id: str
 

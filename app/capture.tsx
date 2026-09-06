@@ -2,7 +2,7 @@
 /* eslint-disable jsx-a11y/media-has-caption -- Room geometry previews are silent; audio is not used. */
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, Monitor, Camera, Square } from 'lucide-react';
+import { Upload, Monitor, Camera, Square, Trash2 } from 'lucide-react';
 import type { State } from './types';
 export default function Capture({
   source,
@@ -10,12 +10,14 @@ export default function Capture({
   busy,
   onUpload,
   onReconstruct,
+  onDelete,
 }: {
   source: string;
   capture?: State['captures'][number];
   busy: boolean;
   onUpload: (source: string, file: File) => Promise<void>;
   onReconstruct: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState('');
@@ -203,6 +205,15 @@ export default function Capture({
         >
           Reconstruct capture
         </Button>
+        {capture && (
+          <Button
+            variant="destructive"
+            disabled={busy}
+            onClick={() => onDelete(capture.id)}
+          >
+            <Trash2 /> Delete stored capture
+          </Button>
+        )}
       </div>
       <p className="video-note">
         Record your camera, or choose a screen, window, or tab. Recording stops
