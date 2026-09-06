@@ -1,0 +1,13 @@
+# Pure-Python AMB3R/SfM dependencies. CUDA extensions are installed separately
+# in Dockerfile so their Torch/CUDA build matrix is explicit.
+numpy==1.26.4
+addict==2.4.0
+einops==0.8.0
+evo==1.31.1
+gdown==5.2.0
+matplotlib==3.10.6
+omegaconf==2.3.0
+scipy==1.16.1
+timm==0.6.7
+tqdm==4.67.1
+utils3d @ git+https://github.com/EasternJournalist/utils3d.git@c5daf6f6c244d251f252102d09e9b7bcef791a38

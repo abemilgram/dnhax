@@ -1,8 +1,8 @@
 import './globals.css';
 export const metadata = {
-  title: 'simv1 · Room reconstruction',
+  title: 'DNHacks Defense · Tactical Brain',
   description:
-    'Independent room captures, inspectable alignment, shared geometry.',
+    'Deterministic tactical replay with a separate reconstruction lab.',
 };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (

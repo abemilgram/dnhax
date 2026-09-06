@@ -676,7 +676,7 @@ export default function Viewer({
             ? `Live batch ${scene.live.batch} · ${scene.live.continuity.status === 'accepted' ? 'continuous preview' : 'new segment'}`
             : aligned
               ? 'Registered scene'
-              : scene.reconstruction?.method === 'joint_vggt'
+              : scene.reconstruction?.method?.startsWith('joint_')
                 ? 'Joint reconstruction · shared coordinates'
                 : 'Independent coordinate frames'}
       </div>

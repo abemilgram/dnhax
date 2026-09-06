@@ -23,18 +23,33 @@ def select_device(torch, requested=None):
     return requested
 
 
-def frame_limit(device):
-    raw = os.environ.get(
-        "SIMV1_MAX_FRAMES",
-        "24" if device == "cuda" else "8" if device == "mps" else "2",
-    )
+_UNLIMITED = {"", "0", "inf", "infinite", "unlimited", "none"}
+
+
+def parse_optional_frames(raw, name, minimum=2):
+    """Return a frame count, or None when the caller asked for no cap."""
+    text = str(raw).strip().lower()
+    if text in _UNLIMITED:
+        return None
     try:
         value = int(raw)
     except ValueError as exc:
-        raise ValueError("SIMV1_MAX_FRAMES must be an integer from 2 to 60.") from exc
-    if not 2 <= value <= 60:
-        raise ValueError("SIMV1_MAX_FRAMES must be an integer from 2 to 60.")
+        raise ValueError(
+            f"{name} must be 0 (unlimited) or an integer of at least {minimum}."
+        ) from exc
+    if value < minimum:
+        raise ValueError(
+            f"{name} must be 0 (unlimited) or an integer of at least {minimum}."
+        )
     return value
+
+
+def frame_limit(device):
+    del device
+    return parse_optional_frames(
+        os.environ.get("SIMV1_MAX_FRAMES", "0"),
+        "SIMV1_MAX_FRAMES",
+    )
 
 
 def device_label(torch):

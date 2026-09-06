@@ -1,4 +1,4 @@
-"""VGGT inference and export in the coordinate system shared by each input sequence."""
+"""Model inference and export in the coordinate system shared by each input sequence."""
 
 import json
 import shutil
@@ -28,22 +28,41 @@ def infer_images(images, device, progress):
 
 def export_cloud(folder, capture, frames, prediction, indices, device, **extra):
     """Split provenance only: never recenter, rescale or refit a source's geometry."""
-    depth = prediction["depth"][indices]
     confidence = prediction["confidence"][indices]
-    ex = prediction["extrinsics"][indices]
-    ins = prediction["intrinsics"][indices]
     rgb = prediction["rgb"][indices]
+    ex = prediction.get("extrinsics")
+    ex = ex[indices] if ex is not None else None
+    ins = prediction.get("intrinsics")
+    ins = ins[indices] if ins is not None else None
+    depth = prediction.get("depth")
+    depth = depth[indices] if depth is not None else None
+    world_points = prediction.get("world_points")
+    world_points = world_points[indices] if world_points is not None else None
+    unmapped = set(prediction.get("unmapped_frames", []))
     if confidence.ndim == 4:
         confidence = confidence[..., 0]
     points, colors, cameras = [], [], []
-    for i, d in enumerate(depth):
-        h, w = d.shape
-        y, x = np.mgrid[:h, :w]
-        rays = np.stack([x, y, np.ones_like(x)], -1) @ np.linalg.inv(ins[i]).T
-        cam = rays * d[..., None]
-        world = (cam - ex[i, :3, 3]) @ ex[i, :3, :3]
-        valid = np.isfinite(world).all(-1) & (d > 0) & np.isfinite(confidence[i])
-        valid &= ~depth_edge_mask(d)
+    for i, original_index in enumerate(indices):
+        if original_index in unmapped:
+            continue
+        if world_points is not None:
+            world = world_points[i]
+            valid = np.isfinite(world).all(-1) & np.isfinite(confidence[i])
+            if ex is not None:
+                camera_points = (
+                    world @ ex[i, :3, :3].T + ex[i, :3, 3]
+                )
+                camera_depth = camera_points[..., 2]
+                valid &= (camera_depth > 0) & ~depth_edge_mask(camera_depth)
+        else:
+            d = depth[i]
+            h, w = d.shape
+            y, x = np.mgrid[:h, :w]
+            rays = np.stack([x, y, np.ones_like(x)], -1) @ np.linalg.inv(ins[i]).T
+            cam = rays * d[..., None]
+            world = (cam - ex[i, :3, 3]) @ ex[i, :3, :3]
+            valid = np.isfinite(world).all(-1) & (d > 0) & np.isfinite(confidence[i])
+            valid &= ~depth_edge_mask(d)
         valid &= confidence[i] > 1e-5
         if valid.any():
             valid &= confidence[i] >= np.percentile(confidence[i][valid], 20)
@@ -51,13 +70,18 @@ def export_cloud(folder, capture, frames, prediction, indices, device, **extra):
         colors.append(
             (np.clip(rgb[i].transpose(1, 2, 0), 0, 1) * 255).astype("uint8")[valid]
         )
-        cameras.append(
-            {
-                "frame": store.artifact_url(frames[i]["path"]),
-                "t": frames[i]["t"],
-                "intrinsics": ins[i].tolist(),
-                "world_to_camera": ex[i].tolist(),
-            }
+        camera = {
+            "frame": store.artifact_url(frames[i]["path"]),
+            "t": frames[i]["t"],
+        }
+        if ins is not None:
+            camera["intrinsics"] = ins[i].tolist()
+        if ex is not None:
+            camera["world_to_camera"] = ex[i].tolist()
+        cameras.append(camera)
+    if not points:
+        raise RuntimeError(
+            f"No mapped geometry was reconstructed for source {capture['source']}."
         )
     points, colors = np.concatenate(points), np.concatenate(colors)
     if not len(points):
@@ -65,13 +89,16 @@ def export_cloud(folder, capture, frames, prediction, indices, device, **extra):
             f"No valid geometry was reconstructed for source {capture['source']}."
         )
     folder.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        folder / "geometry.npz",
-        depth=depth,
-        confidence=confidence,
-        extrinsics=ex,
-        intrinsics=ins,
-    )
+    geometry = {"confidence": confidence}
+    for key, value in (
+        ("depth", depth),
+        ("world_points", world_points),
+        ("extrinsics", ex),
+        ("intrinsics", ins),
+    ):
+        if value is not None:
+            geometry[key] = value
+    np.savez_compressed(folder / "geometry.npz", **geometry)
     from .worker import cloud_record
 
     limit = extra.pop("point_limit", 1000000)
@@ -87,7 +114,7 @@ def export_cloud(folder, capture, frames, prediction, indices, device, **extra):
         cameras=cameras,
         compute_device=device,
         frame_count=len(frames),
-        precision="float32",
+        precision=prediction.get("precision", "float32"),
         model=prediction["model"],
         model_variant=prediction["model_variant"],
         **extra,
@@ -111,31 +138,37 @@ def reconstruct(capture, progress):
         record = json.loads((folder / "cloud.json").read_text())
         (capture_folder / "cloud.json").write_text(json.dumps(record, allow_nan=False))
         return record
-    progress(f"Extracting up to {max_frames} frames for {device.upper()}")
+    progress(
+        f"Extracting {'all' if max_frames is None else f'up to {max_frames}'} "
+        f"1 fps frames for {device.upper()}"
+    )
+    command = [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-y",
+        "-i",
+        capture["path"],
+        "-vf",
+        "fps=1,vflip,scale=960:960:force_original_aspect_ratio=decrease",
+    ]
+    if max_frames is not None:
+        command.extend(["-frames:v", str(max_frames)])
+    command.append(str(frames / "%04d.jpg"))
     result = subprocess.run(
-        [
-            "ffmpeg",
-            "-nostdin",
-            "-v",
-            "error",
-            "-y",
-            "-i",
-            capture["path"],
-            "-vf",
-            "fps=1,scale=960:960:force_original_aspect_ratio=decrease",
-            "-frames:v",
-            str(max_frames),
-            str(frames / "%04d.jpg"),
-        ],
+        command,
         capture_output=True,
         text=True,
-        timeout=180,
+        timeout=180 if max_frames is not None else 3600,
     )
     if result.returncode:
         raise RuntimeError(
             "FFmpeg could not decode this capture: " + result.stderr[-400:]
         )
-    images = sorted(frames.glob("*.jpg"))[:max_frames]
+    images = sorted(frames.glob("*.jpg"))
+    if max_frames is not None:
+        images = images[:max_frames]
     if len(images) < 2:
         raise RuntimeError(
             "Capture needs at least two usable frames. Submit a longer walkthrough."

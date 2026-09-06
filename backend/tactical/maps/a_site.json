@@ -1,0 +1,70 @@
+{
+  "name": "Fictional A-Site-Inspired Metric Twin",
+  "description": "Original abstract geometry for offline simulation; not copied from CS2 maps or assets.",
+  "coordinate_system": "right-handed:x-east,y-up,z-north",
+  "units": "meters",
+  "obstacles": [
+    {"id": "west_wall", "min": [-15.0, 0.0, -12.0], "max": [-14.5, 3.5, 12.0]},
+    {"id": "east_wall", "min": [14.5, 0.0, -12.0], "max": [15.0, 3.5, 12.0]},
+    {"id": "north_wall_left", "min": [-15.0, 0.0, 11.5], "max": [-3.0, 3.5, 12.0]},
+    {"id": "north_wall_right", "min": [3.0, 0.0, 11.5], "max": [15.0, 3.5, 12.0]},
+    {"id": "south_wall_left", "min": [-15.0, 0.0, -12.0], "max": [-5.0, 3.5, -11.5]},
+    {"id": "south_wall_right", "min": [5.0, 0.0, -12.0], "max": [15.0, 3.5, -11.5]},
+    {"id": "central_cover", "min": [-1.5, 0.0, -0.8], "max": [1.5, 2.1, 0.8]},
+    {"id": "west_cover", "min": [-8.0, 0.0, 3.0], "max": [-5.5, 1.5, 5.0]},
+    {"id": "east_cover", "min": [6.0, 0.0, -5.0], "max": [8.5, 1.5, -3.0]},
+    {"id": "north_pillar", "min": [-0.8, 0.0, 6.0], "max": [0.8, 3.0, 7.5]}
+  ],
+  "nav_nodes": [
+    {"id": "south_entry", "xyz": [0.0, 0.0, -10.0]},
+    {"id": "south_split", "xyz": [0.0, 0.0, -6.0]},
+    {"id": "west_lane", "xyz": [-6.0, 0.0, -2.0]},
+    {"id": "east_lane", "xyz": [6.0, 0.0, 2.0]},
+    {"id": "site_west", "xyz": [-4.8, 0.0, 1.5]},
+    {"id": "site_east", "xyz": [4.8, 0.0, 1.5]},
+    {"id": "north_exit", "xyz": [0.0, 0.0, 10.0]},
+    {"id": "west_anchor", "xyz": [-11.0, 0.0, 7.0]},
+    {"id": "east_anchor", "xyz": [11.0, 0.0, -7.0]}
+  ],
+  "nav_edges": [
+    {"id": "e01", "from": "south_entry", "to": "south_split", "cost": 4.0},
+    {"id": "e02", "from": "south_split", "to": "west_lane", "cost": 7.2},
+    {"id": "e03", "from": "south_split", "to": "east_lane", "cost": 7.2},
+    {"id": "e04", "from": "west_lane", "to": "site_west", "cost": 5.2},
+    {"id": "e05", "from": "east_lane", "to": "site_east", "cost": 5.2},
+    {"id": "e06", "from": "site_west", "to": "site_east", "cost": 7.3},
+    {"id": "e07", "from": "site_west", "to": "north_exit", "cost": 8.0},
+    {"id": "e08", "from": "site_east", "to": "north_exit", "cost": 8.0},
+    {"id": "e09", "from": "site_west", "to": "west_anchor", "cost": 9.0},
+    {"id": "e10", "from": "site_east", "to": "east_anchor", "cost": 9.0}
+  ],
+  "zones": [
+    {"id": "approach", "min": [-5.0, 0.0, -11.5], "max": [5.0, 3.0, -5.0], "openness": 0.7},
+    {"id": "site", "min": [-5.0, 0.0, -5.0], "max": [5.0, 3.0, 5.5], "openness": 0.9},
+    {"id": "west_flank", "min": [-14.5, 0.0, -5.0], "max": [-5.0, 3.0, 11.5], "openness": 0.25},
+    {"id": "east_flank", "min": [5.0, 0.0, -11.5], "max": [14.5, 3.0, 5.0], "openness": 0.55},
+    {"id": "north_connector", "min": [-3.0, 0.0, 5.5], "max": [3.0, 3.0, 11.5], "openness": 0.65}
+  ],
+  "intents": [
+    {
+      "id": "hold",
+      "kind": "HOLD",
+      "anchor": "south_split",
+      "semantics": "Remain at the authored south approach anchor."
+    },
+    {
+      "id": "cross",
+      "kind": "CROSS",
+      "waypoints": ["east_lane", "site_east"],
+      "goal": "north_exit",
+      "semantics": "Use the authored direct east crossing to the north exit."
+    },
+    {
+      "id": "flank",
+      "kind": "FLANK",
+      "waypoints": ["west_lane", "site_west"],
+      "goal": "north_exit",
+      "semantics": "Use the authored west corridor before reaching the same exit."
+    }
+  ]
+}

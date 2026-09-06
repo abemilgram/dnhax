@@ -11,6 +11,11 @@ from . import store
 app = FastAPI(title="simv1 room reconstruction", version="0.1.0")
 
 
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
+
+
 @app.get("/api/state")
 def state():
     with store.connect() as db:
@@ -79,6 +84,32 @@ async def upload(source: Literal["A", "B"] = Form(...), file: UploadFile = File(
     finally:
         await file.close()
     return {"id": identity, "source": source}
+
+
+@app.post("/api/captures/{identity}/delete")
+def delete_capture(identity: str):
+    result = store.delete_capture(identity)
+    if result is None:
+        raise HTTPException(404, "Capture not found.")
+    return result
+
+
+class CleanupRequest(BaseModel):
+    hours: float = Field(default=24, gt=0, le=8760, allow_inf_nan=False)
+
+
+@app.post("/api/cleanup")
+def cleanup(request: CleanupRequest):
+    return store.cleanup_old(request.hours)
+
+
+@app.post("/api/reset")
+def reset():
+    store.reset_workspace()
+    from .tactical import api as tactical_api
+
+    tactical_api.invalidate_service(store.ROOT)
+    return {"reset": True}
 
 
 class CaptureJob(BaseModel):
@@ -193,8 +224,10 @@ def artifact(relative: str):
 
 
 from .live_api import router as live_router
+from .tactical.api import router as tactical_router
 
 app.include_router(live_router)
+app.include_router(tactical_router)
 
 # Production export: one origin serves interface and API on port 8000.
 web = Path(__file__).resolve().parents[1] / "dist" / "client"

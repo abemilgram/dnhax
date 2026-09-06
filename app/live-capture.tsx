@@ -263,9 +263,12 @@ function LiveSource({
           );
           canvas.width = Math.round(preview.videoWidth * scale);
           canvas.height = Math.round(preview.videoHeight * scale);
-          canvas
-            .getContext('2d')!
-            .drawImage(preview, 0, 0, canvas.width, canvas.height);
+          const context = canvas.getContext('2d')!;
+          context.save();
+          context.translate(0, canvas.height);
+          context.scale(1, -1);
+          context.drawImage(preview, 0, 0, canvas.width, canvas.height);
+          context.restore();
           const time = preview.currentTime;
           const blob = await new Promise<Blob | null>((resolve) =>
             canvas.toBlob(resolve, 'image/jpeg', 0.8),
@@ -443,7 +446,11 @@ export default function LiveCapture({
     };
   }, [refresh]);
   useEffect(() => {
-    if (follow && session?.scene) {
+    if (
+      follow &&
+      session?.scene &&
+      delivered.current !== session.scene.id
+    ) {
       delivered.current = session.scene.id;
       onScene(session.scene);
     }

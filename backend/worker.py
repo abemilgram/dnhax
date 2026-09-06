@@ -1,4 +1,5 @@
 import json
+import os
 import signal
 import threading
 import time
@@ -239,9 +240,16 @@ def main():
         )
     live.recover()
     last_live = False
+    retention_hours = float(os.environ.get("SIMV1_RETENTION_HOURS", "0"))
+    last_retention = 0.0
     print("simv1 worker:", device, flush=True)
     try:
         while True:
+            if retention_hours > 0 and time.time() - last_retention >= 3600:
+                removed = store.cleanup_old(retention_hours)
+                if any(removed.values()):
+                    print(f"Retention cleanup: {removed}", flush=True)
+                last_retention = time.time()
             live.cleanup()
             job = store.claim() if last_live else None
             if not job:
@@ -250,8 +258,6 @@ def main():
             if job:
                 watchdog = None
                 if job["kind"] == "live":
-                    import os
-
                     def expire(batch_id=job["payload"]["batch_id"]):
                         live.fail(
                             batch_id,

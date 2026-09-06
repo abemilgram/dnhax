@@ -9,16 +9,14 @@ import time
 import numpy as np
 
 from .reconstruct import compute_device, infer_images, export_cloud
+from .runtime import parse_optional_frames
 
 
 def frames_per_source():
-    try:
-        count = int(os.environ.get("SIMV1_JOINT_FRAMES_PER_SOURCE", "4"))
-    except ValueError as exc:
-        raise ValueError("SIMV1_JOINT_FRAMES_PER_SOURCE must be an integer from 2 to 8.") from exc
-    if not 2 <= count <= 8:
-        raise ValueError("SIMV1_JOINT_FRAMES_PER_SOURCE must be an integer from 2 to 8.")
-    return count
+    return parse_optional_frames(
+        os.environ.get("SIMV1_JOINT_FRAMES_PER_SOURCE", "0"),
+        "SIMV1_JOINT_FRAMES_PER_SOURCE",
+    )
 
 
 def sample_candidates(capture, folder, count):
@@ -38,23 +36,43 @@ def sample_candidates(capture, folder, count):
     folder.mkdir(parents=True, exist_ok=True)
     candidates = []
     sift = cv2.SIFT_create(nfeatures=1200)
-    # Seek across the whole clip, leaving a margin before its final frame.
-    for index, timestamp in enumerate(np.linspace(0, duration - min(0.1, duration / 10), count)):
-        path = folder / f"{index:04d}.jpg"
+    scale = "vflip,scale=960:960:force_original_aspect_ratio=decrease"
+    if count is None:
         result = subprocess.run([
-            "ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{timestamp:.6f}",
-            "-i", capture["path"], "-frames:v", "1", "-vf",
-            "scale=960:960:force_original_aspect_ratio=decrease", str(path),
-        ], capture_output=True, text=True, timeout=60)
+            "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", capture["path"],
+            "-vf", f"fps=1,{scale}", str(folder / "%04d.jpg"),
+        ], capture_output=True, text=True, timeout=3600)
         if result.returncode:
-            continue
+            raise RuntimeError(
+                f"FFmpeg could not decode source {capture['source']}: "
+                + result.stderr[-400:]
+            )
+        extracted = [
+            (folder / name, float(index))
+            for index, name in enumerate(sorted(p.name for p in folder.glob("*.jpg")))
+        ]
+    else:
+        # Seek across the whole clip, leaving a margin before its final frame.
+        extracted = []
+        for index, timestamp in enumerate(
+            np.linspace(0, duration - min(0.1, duration / 10), count)
+        ):
+            path = folder / f"{index:04d}.jpg"
+            result = subprocess.run([
+                "ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{timestamp:.6f}",
+                "-i", capture["path"], "-frames:v", "1", "-vf", scale, str(path),
+            ], capture_output=True, text=True, timeout=60)
+            if result.returncode:
+                continue
+            extracted.append((path, float(timestamp)))
+    for path, timestamp in extracted:
         image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
         if image is None:
             continue
         image = cv2.resize(image, (round(image.shape[1] * 518 / max(image.shape)),
                                    round(image.shape[0] * 518 / max(image.shape))))
         _, descriptors = sift.detectAndCompute(image, None)
-        candidates.append({"path": path, "t": float(timestamp),
+        candidates.append({"path": path, "t": timestamp,
                            "sharpness": float(cv2.Laplacian(image, cv2.CV_64F).var()),
                            "descriptors": descriptors})
     if len(candidates) < 2:
@@ -95,32 +113,41 @@ def reconstruct_joint(captures, folder, progress):
     count = frames_per_source()
     device = compute_device()
     candidates = []
+    sample_count = None if count is None else max(12, count * 3)
     for capture in captures:
         progress(f"Selecting keyframes across source {capture['source']}")
-        candidates.append(sample_candidates(capture, folder / capture["source"] / "frames", max(12, count * 3)))
+        candidates.append(sample_candidates(capture, folder / capture["source"] / "frames", sample_count))
     progress("Looking for shared visual features between A and B")
     matches, anchor_a, anchor_b = max(
         (reciprocal_matches(a["descriptors"], b["descriptors"]), i, j)
         for i, a in enumerate(candidates[0]) for j, b in enumerate(candidates[1])
     )
-    selected = [select_frames(candidates[0], count, anchor_a),
-                select_frames(candidates[1], count, anchor_b)]
+    if count is None:
+        selected = [sorted(frames, key=lambda frame: frame["t"]) for frames in candidates]
+    else:
+        selected = [select_frames(candidates[0], count, anchor_a),
+                    select_frames(candidates[1], count, anchor_b)]
     paths = [frame["path"] for frames in selected for frame in frames]
     # All A and B frames occupy the same sequence dimension, not separate batches.
     prediction = infer_images(paths, device, progress)
+    method = (
+        "joint_amb3r"
+        if prediction.get("model_key") == "amb3r"
+        else "joint_vggt"
+    )
     clouds, offset = [], 0
     for capture, frames in zip(captures, selected):
         progress(f"Exporting source {capture['source']} in shared coordinates")
         indices = list(range(offset, offset + len(frames)))
         clouds.append(export_cloud(folder / capture["source"], capture, frames,
-                                   prediction, indices, device, reconstruction_method="joint_vggt"))
+                                   prediction, indices, device, reconstruction_method=method))
         offset += len(frames)
     return clouds, {
-        "method": "joint_vggt",
+        "method": method,
         "model": prediction["model"],
         "model_variant": prediction["model_variant"],
         "frames_per_source": [len(frames) for frames in selected],
-        "anchor_times": [frames[0]["t"] for frames in selected],
+        "anchor_times": [candidates[0][anchor_a]["t"], candidates[1][anchor_b]["t"]],
         "anchor_reciprocal_matches": matches,
         "overlap_verified": False,
         "quality_note": ("Few shared visual features found. Overlap may be insufficient; inspect both sources."

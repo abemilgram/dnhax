@@ -275,7 +275,14 @@ def process(job):
         folder / "continuity.npz",
         **{
             k: prediction[k]
-            for k in ("depth", "confidence", "extrinsics", "intrinsics")
+            for k in (
+                "depth",
+                "world_points",
+                "confidence",
+                "extrinsics",
+                "intrinsics",
+            )
+            if k in prediction
         },
     )
     clouds = []
@@ -299,7 +306,11 @@ def process(job):
                 indices,
                 device,
                 point_limit=200000,
-                reconstruction_method="live_vggt",
+                reconstruction_method=(
+                    "live_amb3r"
+                    if prediction.get("model_key") == "amb3r"
+                    else "live_vggt"
+                ),
             )
         )
     manifest = {

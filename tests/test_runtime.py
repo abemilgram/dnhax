@@ -26,13 +26,17 @@ def test_explicit_device_never_silently_falls_back():
         select_device(fake_torch(), "metal")
 
 
-def test_bounded_frame_defaults_and_override(monkeypatch):
+def test_frame_limit_is_unlimited_by_default(monkeypatch):
     monkeypatch.delenv("SIMV1_MAX_FRAMES", raising=False)
-    assert [frame_limit(d) for d in ["cuda", "mps", "cpu"]] == [24, 8, 2]
+    assert [frame_limit(d) for d in ["cuda", "mps", "cpu"]] == [None, None, None]
     monkeypatch.setenv("SIMV1_MAX_FRAMES", "4")
     assert frame_limit("mps") == 4
     monkeypatch.setenv("SIMV1_MAX_FRAMES", "0")
-    with pytest.raises(ValueError):
+    assert frame_limit("mps") is None
+    monkeypatch.setenv("SIMV1_MAX_FRAMES", "unlimited")
+    assert frame_limit("cuda") is None
+    monkeypatch.setenv("SIMV1_MAX_FRAMES", "1")
+    with pytest.raises(ValueError, match="unlimited"):
         frame_limit("mps")
 
 

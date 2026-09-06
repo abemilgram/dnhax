@@ -33,6 +33,19 @@ def camera_locations(prediction, frames):
 
 
 def world_pixels(prediction, index):
+    if "world_points" in prediction:
+        points = prediction["world_points"][index]
+        c = prediction["confidence"][index].squeeze()
+        valid = np.isfinite(points).all(-1) & np.isfinite(c) & (c > 1e-5)
+        if "extrinsics" in prediction:
+            ex = prediction["extrinsics"][index]
+            camera_points = points @ ex[:3, :3].T + ex[:3, 3]
+            camera_depth = camera_points[..., 2]
+            valid &= (camera_depth > 0) & ~depth_edge_mask(camera_depth)
+        if valid.any():
+            valid &= c >= np.percentile(c[valid], 40)
+        return points, valid
+
     d = prediction["depth"][index]
     h, w = d.shape
     y, x = np.mgrid[:h, :w]
@@ -116,10 +129,16 @@ def continuity(current, ids, previous, old_ids):
 def apply_similarity(prediction, matrix):
     scale = float(np.cbrt(np.linalg.det(matrix[:3, :3])))
     rotation = matrix[:3, :3] / scale
+    if "world_points" in prediction:
+        shape = prediction["world_points"].shape
+        prediction["world_points"] = transform(
+            prediction["world_points"].reshape(-1, 3), matrix
+        ).reshape(shape)
     ex = prediction["extrinsics"].copy()
     ex[:, :3, :3] = ex[:, :3, :3] @ rotation.T
     ex[:, :3, 3] = (
         scale * prediction["extrinsics"][:, :3, 3] - ex[:, :3, :3] @ matrix[:3, 3]
     )
     prediction["extrinsics"] = ex
-    prediction["depth"] = prediction["depth"] * scale
+    if "depth" in prediction:
+        prediction["depth"] = prediction["depth"] * scale

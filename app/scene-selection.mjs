@@ -13,10 +13,12 @@ export function sceneLabel(scene) {
   if (scene.live) return `Live batch ${scene.live.batch}`;
   return scene.sample
     ? 'Sample A + B'
-    : scene.reconstruction?.method === 'joint_vggt'
-      ? scene.reconstruction.model === 'facebook/VGGT-Omega'
-        ? 'Joint A + B · VGGT-Ω'
-        : 'Joint A + B'
+    : scene.reconstruction?.method?.startsWith('joint_')
+      ? scene.reconstruction.model === 'AMB3R-SfM'
+        ? 'Joint A + B · AMB3R'
+        : scene.reconstruction.model === 'facebook/VGGT-Omega'
+          ? 'Joint A + B · VGGT-Ω'
+          : 'Joint A + B'
       : isCombinedScene(scene)
         ? 'Combined A + B'
         : scene.title;

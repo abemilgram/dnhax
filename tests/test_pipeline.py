@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import time
 from fastapi.testclient import TestClient
 from backend import store
 from backend.api import app
@@ -99,6 +100,69 @@ def test_capture_validation_and_missing_reconstruction(client):
         == client.post("/api/reconstruct", json={"capture_id": capture["id"]}).json()
     )
     assert not state["scenes"]
+
+
+def test_capture_delete_removes_derived_data(client):
+    capture = client.post(
+        "/api/captures",
+        data={"source": "A"},
+        files={"file": ("video.mp4", b"fake-video", "video/mp4")},
+    ).json()
+    reconstruction = store.ROOT / "reconstructions" / capture["id"]
+    reconstruction.mkdir(parents=True)
+    (reconstruction / "cloud.json").write_text("{}")
+    scene_id = store.uid()
+    store.publish(
+        {
+            "id": scene_id,
+            "created": 1,
+            "sample": False,
+            "clouds": [{"capture_id": capture["id"]}],
+        }
+    )
+    client.post("/api/reconstruct", json={"capture_id": capture["id"]})
+
+    response = client.post(f"/api/captures/{capture['id']}/delete")
+    assert response.status_code == 200
+    assert response.json()["scenes"] == 1
+    state = client.get("/api/state").json()
+    assert state["captures"] == []
+    assert state["scenes"] == []
+    assert state["jobs"] == []
+    assert not reconstruction.exists()
+    assert not (store.ROOT / "scenes" / scene_id).exists()
+
+
+def test_cleanup_and_reset_iteration_data(client):
+    capture = client.post(
+        "/api/captures",
+        data={"source": "A"},
+        files={"file": ("old.mp4", b"old-video", "video/mp4")},
+    ).json()
+    with store.connect() as db:
+        db.execute(
+            "UPDATE captures SET created=? WHERE id=?",
+            (time.time() - 48 * 3600, capture["id"]),
+        )
+    response = client.post("/api/cleanup", json={"hours": 24})
+    assert response.status_code == 200
+    assert response.json()["captures"] == 1
+
+    client.post(
+        "/api/captures",
+        data={"source": "B"},
+        files={"file": ("new.mp4", b"new-video", "video/mp4")},
+    )
+    client.post("/api/sample")
+    models = store.ROOT / "models"
+    models.mkdir()
+    (models / "keep.txt").write_text("weights stay outside workspace cleanup")
+    assert client.post("/api/reset").json() == {"reset": True}
+    state = client.get("/api/state").json()
+    assert state["captures"] == []
+    assert state["jobs"] == []
+    assert state["scenes"] == []
+    assert (models / "keep.txt").is_file()
 
 
 def test_artifact_traversal_and_database_are_not_exposed(client):

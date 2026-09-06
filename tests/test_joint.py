@@ -81,6 +81,33 @@ def test_joint_uses_one_sequence_and_preserves_shared_camera_coordinates(capture
     assert client.get('/api/state').json()['scenes'][1] == scene
 
 
+def test_joint_records_amb3r_method_without_changing_source_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, 'ROOT', tmp_path)
+    monkeypatch.setenv('SIMV1_JOINT_FRAMES_PER_SOURCE', '2')
+    monkeypatch.setattr(joint, 'compute_device', lambda: 'cpu')
+    def candidates(capture, folder, count):
+        folder.mkdir(parents=True)
+        return [{'path': folder / f'{i}.jpg', 't': float(i),
+                 'sharpness': 1, 'descriptors': None} for i in range(2)]
+    monkeypatch.setattr(joint, 'sample_candidates', candidates)
+    def predict(images, device, progress):
+        n = len(images)
+        return {'model': 'AMB3R-SfM', 'model_key': 'amb3r', 'model_variant': '92c4081',
+                'depth': np.ones((n, 4, 4)), 'confidence': np.ones((n, 4, 4)),
+                'extrinsics': np.tile(np.eye(4)[:3], (n, 1, 1)),
+                'intrinsics': np.tile(np.eye(3), (n, 1, 1)),
+                'rgb': np.ones((n, 3, 4, 4))}
+    monkeypatch.setattr(joint, 'infer_images', predict)
+    clouds, reconstruction = joint.reconstruct_joint(
+        [{'id': 'a', 'source': 'A', 'path': 'a.mp4'},
+         {'id': 'b', 'source': 'B', 'path': 'b.mp4'}],
+        tmp_path,
+        lambda stage: None,
+    )
+    assert reconstruction['method'] == 'joint_amb3r'
+    assert [cloud['source'] for cloud in clouds] == ['A', 'B']
+
+
 def test_failed_joint_never_publishes_a_scene(captures, monkeypatch):
     client, payload = captures
     def fail(*args):
@@ -101,11 +128,43 @@ def test_keyframes_include_anchor_and_span_clip():
     assert min(f['t'] for f in selected) <= 1
 
 
-def test_joint_frame_budget_is_separate_and_bounded(monkeypatch):
+def test_joint_frame_budget_is_separate_and_unbounded(monkeypatch):
     monkeypatch.setenv('SIMV1_MAX_FRAMES', '2')
     monkeypatch.delenv('SIMV1_JOINT_FRAMES_PER_SOURCE', raising=False)
+    assert joint.frames_per_source() is None
+    monkeypatch.setenv('SIMV1_JOINT_FRAMES_PER_SOURCE', '4')
     assert joint.frames_per_source() == 4
-    for value in ('0', '1', '9', 'garbage'):
+    monkeypatch.setenv('SIMV1_JOINT_FRAMES_PER_SOURCE', '0')
+    assert joint.frames_per_source() is None
+    for value in ('1', 'garbage'):
         monkeypatch.setenv('SIMV1_JOINT_FRAMES_PER_SOURCE', value)
-        with pytest.raises(ValueError, match='2 to 8'):
+        with pytest.raises(ValueError, match='unlimited'):
             joint.frames_per_source()
+
+
+def test_unlimited_joint_keeps_every_candidate_in_time_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, 'ROOT', tmp_path)
+    monkeypatch.setenv('SIMV1_JOINT_FRAMES_PER_SOURCE', '0')
+    monkeypatch.setattr(joint, 'compute_device', lambda: 'cpu')
+    def candidates(capture, folder, count):
+        assert count is None
+        folder.mkdir(parents=True)
+        return [{'path': folder / f'{i}.jpg', 't': float(3 - i),
+                 'sharpness': 1, 'descriptors': None} for i in range(3)]
+    monkeypatch.setattr(joint, 'sample_candidates', candidates)
+    def predict(images, device, progress):
+        n = len(images)
+        return {'model': 'facebook/VGGT-1B', 'model_variant': '1B',
+                'depth': np.ones((n, 4, 4)), 'confidence': np.ones((n, 4, 4)),
+                'extrinsics': np.tile(np.eye(4)[:3], (n, 1, 1)),
+                'intrinsics': np.tile(np.eye(3), (n, 1, 1)),
+                'rgb': np.ones((n, 3, 4, 4))}
+    monkeypatch.setattr(joint, 'infer_images', predict)
+    clouds, reconstruction = joint.reconstruct_joint(
+        [{'id': 'a', 'source': 'A', 'path': 'a.mp4'},
+         {'id': 'b', 'source': 'B', 'path': 'b.mp4'}],
+        tmp_path,
+        lambda stage: None,
+    )
+    assert reconstruction['frames_per_source'] == [3, 3]
+    assert [frame['t'] for frame in clouds[0]['cameras']] == [1.0, 2.0, 3.0]
