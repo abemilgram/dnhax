@@ -46,10 +46,25 @@
     {"id": "north_connector", "min": [-3.0, 0.0, 5.5], "max": [3.0, 3.0, 11.5]}
   ],
   "intents": [
-    {"id": "enter_site", "kind": "route", "start": "south_entry", "goal_zone": "site"},
-    {"id": "cross_site", "kind": "route", "start": "site_west", "goal": "site_east"},
-    {"id": "leave_north", "kind": "route", "start": "site_east", "goal": "north_exit"},
-    {"id": "hold_west", "kind": "occupancy", "zone": "west_flank"},
-    {"id": "hold_east", "kind": "occupancy", "zone": "east_flank"}
+    {
+      "id": "hold",
+      "kind": "HOLD",
+      "anchor": "south_split",
+      "semantics": "Remain at the authored south approach anchor."
+    },
+    {
+      "id": "cross",
+      "kind": "CROSS",
+      "waypoints": ["east_lane", "site_east"],
+      "goal": "north_exit",
+      "semantics": "Use the authored direct east crossing to the north exit."
+    },
+    {
+      "id": "flank",
+      "kind": "FLANK",
+      "waypoints": ["west_lane", "site_west"],
+      "goal": "north_exit",
+      "semantics": "Use the authored west corridor before reaching the same exit."
+    }
   ]
 }
